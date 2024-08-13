@@ -1,0 +1,17 @@
+[package]
+name = "embedded-pcf"
+description = "X11 Portable Compiled Font adapter for embedded-graphics"
+version = "0.1.0"
+edition = "2021"
+exclude = [
+    "/test-fonts",
+    "/.gitignore",
+]
+
+[dependencies]
+embedded-graphics = "0.8.1"
+num_enum = { version = "0.7.3", default-features = false }
+
+[features]
+default = ["std"]
+std = []
