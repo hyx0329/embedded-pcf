@@ -3,9 +3,11 @@
 A toy lib loading X11 Portable Compiled Font for embedded-graphics.
 
 `no-std` is currently WIP. It's not working without std because of
-the dependency of some IO traits.
+the dependency of some IO traits([std::io::Seek], [std::io::Read]).
 
 It's not a complete implementation. Some PCF fonts may not be supported.
+
+Due to trait limitation on mutability in embedded-graphics, this lib cannot work with [embedded_graphics::text::Text].
 
 ## Motivation
 
@@ -37,7 +39,7 @@ To read matching glyphs from PCF font file:
 
 Glyphs in PCF may be orphaned, and so may the code points. Examples:
 
-- Looking for a glyph index matching a code point in the lookup table may return 0xFFFF,indicating no matching glyph.
+- Looking for a glyph index matching a code point in the lookup table may return 0xFFFF, indicating no matching glyph.
 - The glyphs may be not associated with a code point at all.
     - the glyph tofu(.notdef) is not in unicode and thus cannot be matched directly
     - the glyphs have names, like tofu's name ".notdef"

@@ -26,6 +26,7 @@ use std::io;
 
 use embedded_graphics::{
     image::{Image, ImageRaw},
+    pixelcolor::BinaryColor,
     prelude::{DrawTarget, PixelColor, Point},
     text::{renderer::TextRenderer, Baseline, DecorationColor},
 };
@@ -35,14 +36,16 @@ use crate::utils::*;
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum Error {
+    /// This lib only supports MSByte first and MSBit first encoding for those fields with multiple possible encodings.
     UnsupportedFormat,
     /// The data is not organized in an expected way, possibly currupted.
     CorruptedData,
-    /// This error is raised when the code point is not found and there's no default char.
+    /// This error is raised when the code point is not found.
     NotFound,
     /// Something's wrong with IO operations.
-    /// In some cases, currupted data also leads to IO error
+    /// In some cases, currupted data also leads to IO error.
     Io,
+    /// Other unclassified errors.
     Other,
 }
 
@@ -259,6 +262,7 @@ pub struct PcfFont<T> {
 }
 
 impl<T> PcfFont<T> {
+    /// The maximum glyph size as a 4-tuple of: width, height, x_offset, y_offset
     #[inline]
     pub fn bounding_box(&self) -> (i16, i16, i16, i16) {
         self.bounding_box
@@ -269,11 +273,13 @@ impl<T> PcfFont<T> {
         self.glyph_count
     }
 
+    /// The number of pixels above the baseline of a typical ascender
     #[inline]
     pub fn ascent(&self) -> i32 {
         self.ascent
     }
 
+    /// The number of pixels below the baseline of a typical descender
     #[inline]
     pub fn desent(&self) -> i32 {
         self.descent
@@ -353,7 +359,12 @@ where
     /// Gets only the metrics of the glyph, to calculate width without using the glyph
     pub fn get_glyph_metrics(&mut self, code_point: u16) -> Result<MetricsEntry, Error> {
         let glyph_index = self.get_glyph_index(code_point)?;
-        self.get_metrics(glyph_index)
+        if let Ok(value) = self.get_metrics(glyph_index) {
+            Ok(value)
+        } else {
+            let glyph_index = self.get_glyph_index(self.default_char)?;
+            self.get_metrics(glyph_index)
+        }
     }
 
     fn get_glyph_index(&mut self, code_point: u16) -> Result<u16, Error> {
@@ -641,9 +652,32 @@ where
             && self.underline_color.is_none()
             && self.strikethrough_color.is_none()
     }
+
+    /// Returns the vertical offset between the line position and the top edge of the bounding box.
+    fn baseline_offset(&self, baseline: Baseline) -> i32 {
+        // TODO: verify actual behavior
+        match baseline {
+            Baseline::Top => 0,
+            Baseline::Bottom => self.font.bounding_box.1 as i32,
+            Baseline::Middle => (self.font.bounding_box.1 / 2) as i32,
+            Baseline::Alphabetic => (self.font.bounding_box.1 + self.font.bounding_box.3) as i32,
+        }
+    }
+
+    fn draw_string_binary<D>(
+        &mut self,
+        text: &str,
+        position: Point,
+        mut target: D,
+    ) -> Result<Point, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        todo!()
+    }
 }
 
-impl<C, T> TextRenderer for PcfFontStyle<'_, C, T>
+impl<T, C> TextRenderer for PcfFontStyle<'_, T, C>
 where
     C: PixelColor,
     T: io::Read + io::Seek,
@@ -660,6 +694,7 @@ where
     where
         D: DrawTarget<Color = Self::Color>,
     {
+        let position = position - Point::new(0, self.baseline_offset(baseline));
         todo!()
     }
 
@@ -682,6 +717,10 @@ where
         position: Point,
         baseline: Baseline,
     ) -> embedded_graphics::text::renderer::TextMetrics {
+        // TODO: optimize for mono fonts
+        let bb_position = position - Point::new(0, self.baseline_offset(baseline));
+        // let mut bb_width = text.chars().map(f)
+
         todo!()
     }
 
@@ -719,6 +758,7 @@ mod test {
         let mut buffer: [u8; 50] = [0; 50];
         let cursor = Cursor::new(FONT_VARIABLE);
         let mut font = load_pcf_font(cursor).unwrap();
+        println!("font: {:?}", font);
         let (length, metrics) = font.read_glyph_raw('聰' as u16, &mut buffer).unwrap();
         let width = metrics.glyph_width() as usize;
         println!("data length: {length}, glyph width: {width}");
