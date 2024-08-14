@@ -596,7 +596,17 @@ mod test {
         let mut buffer: [u8; 50] = [0; 50];
         let cursor = Cursor::new(FONT_VARIABLE);
         let mut font = load_pcf_font(cursor).unwrap();
-        let (length, width) = font.read_glyph_raw('!' as u16, &mut buffer).unwrap();
+        let (length, width) = font.read_glyph_raw('德' as u16, &mut buffer).unwrap();
         println!("data length: {length}, glyph width: {width}");
+        let row_bytes = bytes_per_row(width, 1);
+        let height = length / row_bytes;
+        for row in 0..height {
+            let row_start = row * row_bytes;
+            let row_end = row_start + row_bytes;
+            for pixels in buffer[row_start..row_end].iter() {
+                print!("{:>08b}", pixels)
+            }
+            println!("");
+        }
     }
 }
