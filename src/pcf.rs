@@ -22,7 +22,10 @@ use num_enum::FromPrimitive;
 #[cfg(feature = "std")]
 use std::io;
 
-use embedded_graphics::text::renderer::TextRenderer;
+use embedded_graphics::{
+    image::{Image, ImageRaw},
+    text::renderer::TextRenderer,
+};
 
 use crate::utils::*;
 
@@ -88,6 +91,14 @@ const PCF_BIT_MASK: u32 = 1 << 3;
 /// what the bits are stored in (bytes, shorts, ints) (format>>4)&3
 /// 0=>bytes, 1=>shorts, 2=>ints
 const PCF_SCAN_UNIT_MASK: u32 = 3 << 4;
+
+/// Returns the length of each row in bytes.
+const fn bytes_per_row(width: usize, bytes_align: usize) -> usize {
+    let unit_align_bits = bytes_align * 8;
+    // div floor
+    let block_count = (width + unit_align_bits - 1) / unit_align_bits;
+    block_count * bytes_align
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
@@ -184,14 +195,12 @@ struct EncodingTable {
 #[derive(Debug, Clone, Copy, PartialEq, FromPrimitive)]
 pub enum GlyphPaddingFormat {
     /// padded to one byte
+    #[num_enum(default)]
     Byte,
     /// padded to 2 bytes
     Short,
     /// padded to 4 bytes
     Int,
-    /// Unknown
-    #[num_enum(default)]
-    Unknown,
 }
 
 #[derive(PartialEq)]
@@ -257,41 +266,57 @@ impl<T> PcfFont<T> {
     pub fn row_padding_mode(&self) -> GlyphPaddingFormat {
         self.glyph_row_padding_format
     }
-}
 
-/// Iterate over glyph pixels stored in packed & padded bytes
-struct PixelIter<T: io::Read> {
-    /// glyph width in pixel
-    width: u8,
-    /// glyph height in pixel
-    height: u8,
-    pixel_counter: u8,
-    row_counter: u8,
-    current_data: u8,
-    /// how many bytes per row
-    line_bytes: u8,
-    /// data buffer
-    cursor: T,
+    #[inline]
+    pub fn max_bytes_per_glyph(&self) -> usize {
+        let width = self.bounding_box.0 as usize;
+        let height = self.bounding_box.1 as usize;
+        let row_bytes = bytes_per_row(width, 1);
+        height * row_bytes
+    }
 }
 
 impl<T> PcfFont<T>
 where
     T: io::Read + io::Seek,
 {
-    pub fn get_glyph_raw(&mut self, code_point: u16, buf: &mut [u8]) -> Result<MetricsEntry, Error> {
+    /// Read raw glyph data of the given code_point, return `(length, width)`
+    /// where `length` is the length of data written, the `width` is the glyph's width.
+    /// Glyph rows are always padded to bytes.
+    /// 
+    /// There might be arbitrary glyph sizes. Use the bounding box or [PcfFont::max_bytes_per_glyph
+    /// to calculate the maximum required buffer size.
+    pub fn read_glyph_raw(
+        &mut self,
+        code_point: u16,
+        buf: &mut [u8],
+    ) -> Result<(usize, usize), Error> {
         let glyph_index = self.get_glyph_index(code_point)?;
         let bitmap_offset = self.get_glyph_bitmap_offset(glyph_index)?;
         let metrics = self.get_metrics(glyph_index)?;
 
-        // write glyph to the buffer
-        let bytes_per_row = match self.glyph_row_padding_format {
-            GlyphPaddingFormat::Byte => todo!(),
-            GlyphPaddingFormat::Short => todo!(),
-            GlyphPaddingFormat::Int => todo!(),
-            GlyphPaddingFormat::Unknown => todo!(),
+        let glyph_width = (metrics.right_side_bearing - metrics.left_side_bearing) as usize;
+        let glyph_height = (metrics.character_ascent + metrics.character_descent) as usize;
+        let original_row_bytes = match self.glyph_row_padding_format {
+            GlyphPaddingFormat::Byte => bytes_per_row(glyph_width, 1),
+            GlyphPaddingFormat::Short => bytes_per_row(glyph_width, 2),
+            GlyphPaddingFormat::Int => bytes_per_row(glyph_width, 4),
         };
-
-        Ok(metrics)
+        // convert all padding scheme to padding to bytes
+        let standard_row_bytes = bytes_per_row(glyph_width, 1);
+        self.data.seek(io::SeekFrom::Start((self.bitmap_data_location + bitmap_offset) as u64))?;
+        let skip_count = original_row_bytes - standard_row_bytes;
+        // NOTE: this procedure is for MSBit-first glyphs
+        for row in 0..glyph_height {
+            let buf_start = row * standard_row_bytes;
+            let buf_end = buf_start + standard_row_bytes;
+            self.data.read_exact(&mut buf[buf_start..buf_end])?;
+            // skip extra padding bytes
+            self.data.seek_relative(skip_count as i64)?;
+        }
+        // the length of data written, the width of the bitmap
+        let length = glyph_height * standard_row_bytes;
+        Ok((length, glyph_width))
     }
 
     fn get_glyph_index(&mut self, code_point: u16) -> Result<u16, Error> {
@@ -303,27 +328,29 @@ where
             return Err(Error::NotFound);
         }
 
-        // for 1 or 2 bytes encoding, the prcedure is the same.
-        let index = (enc1 - self.min_byte1) * (self.max_char_or_byte2 - self.min_char_or_byte2 + 1)
+        // for 1 or 2 bytes encoding, the procedure is the same.
+        let indice_offset = (enc1 - self.min_byte1) * (self.max_char_or_byte2 - self.min_char_or_byte2 + 1)
             + (enc2 - self.min_char_or_byte2);
+        // NOTE: each indice takes 2 bytes(u16)
         self.data.seek(io::SeekFrom::Start(
-            (self.encoded_glyph_indices_location + index as u32) as u64,
+            (self.encoded_glyph_indices_location + (indice_offset as u32) * 2) as u64,
         ))?;
         let mut buffer: [u8; 2] = [0; 2];
-        self.data.read_exact(&mut buffer)?;
-        let index = u16::from_be_bytes(buffer);
+        self.data.read_exact(&mut buffer[..])?;
+        let glyph_index = u16::from_be_bytes(buffer);
         // 0xFFFF means there's no matching glyph
-        if index == 0xFFFF {
+        if glyph_index == 0xFFFF {
             Err(Error::NotFound)
         } else {
-            Ok(index)
+            Ok(glyph_index)
         }
     }
 
     fn get_glyph_bitmap_offset(&mut self, glyph_index: u16) -> Result<u32, Error> {
         let mut buffer: [u8; 4] = [0; 4];
+        // NOTE: each glyph location offset takes 4 bytes(u32)
         self.data.seek(io::SeekFrom::Start(
-            (self.bitmap_position_lut_location + glyph_index as u32 * 4) as u64,
+            (self.bitmap_position_lut_location + (glyph_index as u32) * 4) as u64,
         ))?;
         self.data.read_exact(&mut buffer)?;
         Ok(u32::from_be_bytes(buffer))
@@ -414,7 +441,8 @@ where
             return Err(Error::CorruptedData);
         }
         if i.unwrap().format & (PCF_BYTE_MASK | PCF_BIT_MASK) != (PCF_BYTE_MASK | PCF_BIT_MASK) {
-            // only support Most Significant Byte first by the moment
+            // NOTE: only support Most Significant Byte first by the moment
+            // NOTE: current implmentation only supports reading Most-Significant-Bit-First glyph data.
             return Err(Error::UnsupportedFormat);
         }
     }
@@ -427,19 +455,19 @@ where
     /*  0=>bytes, 1=>shorts, 2=>ints */
     /* what the bits are stored in (bytes, shorts, ints) (format>>4)&3 */
     /*  0=>bytes, 1=>shorts, 2=>ints */
-    // So 0xE means: MSByte first, MSBit first, glyph row padded to int
+    // So 0xE means: MSByte first, MSBit first, glyph row padded to int(4 bytes)
     if table_toc[0].unwrap().format & PCF_SCAN_UNIT_MASK != 0 {
         // only support bits in bytes
         return Err(Error::UnsupportedFormat);
     }
-    let glyph_row_padding_format = GlyphPaddingFormat::from_primitive(
-        (table_toc[0].unwrap().format & PCF_GLYPH_PAD_MASK) as u8,
-    );
-    match glyph_row_padding_format {
-        GlyphPaddingFormat::Byte => {}
-        GlyphPaddingFormat::Int => {}
-        _ => return Err(Error::UnsupportedFormat),
+    let glyph_row_padding_format = table_toc[0].unwrap().format & PCF_GLYPH_PAD_MASK;
+    // TODO: is this check necessary?
+    if glyph_row_padding_format == PCF_GLYPH_PAD_MASK {
+        return Err(Error::CorruptedData);
     }
+    let glyph_row_padding_format = GlyphPaddingFormat::from_primitive(
+        glyph_row_padding_format as u8
+    );
 
     // reconstruct the data
 
@@ -500,7 +528,6 @@ where
         let minbounds = MetricsEntry::new_from_standard(&buffer);
         data.read_exact(&mut buffer[0..12])?;
         let maxbounds = MetricsEntry::new_from_standard(&buffer);
-        println!("Max {:?} \n Min {:?}", maxbounds, minbounds);
         let width = maxbounds.right_side_bearing - minbounds.left_side_bearing;
         let height = maxbounds.character_ascent + maxbounds.character_descent;
         (
@@ -517,7 +544,10 @@ where
         table_toc[1].unwrap().offset + 4 + if metrics_compressed { 2 } else { 4 };
     let encoded_glyph_indices_location = table_toc[2].unwrap().offset + 4 + 5 * 2;
 
-    println!("Bitmap data location: {}/{}", bitmap_data_location, metrics_data_location);
+    // println!(
+    //     "Bitmap data location: {}/{}/{}/{}",
+    //     bitmap_data_location, metrics_data_location, encoded_glyph_indices_location, table_toc[2].unwrap().offset
+    // );
 
     Ok(PcfFont {
         data,
@@ -559,5 +589,14 @@ mod test {
         let _ = load_pcf_font(cursor).unwrap();
         let cursor = Cursor::new(FONT_MONO);
         let _ = load_pcf_font(cursor).unwrap();
+    }
+
+    #[test]
+    fn test_loading_glyphs() {
+        let mut buffer: [u8; 50] = [0; 50];
+        let cursor = Cursor::new(FONT_VARIABLE);
+        let mut font = load_pcf_font(cursor).unwrap();
+        let (length, width) = font.read_glyph_raw('!' as u16, &mut buffer).unwrap();
+        println!("data length: {length}, glyph width: {width}");
     }
 }
