@@ -61,7 +61,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_converters_le() {
+    fn converters_le() {
         let bytes: [u8; 4] = [0x0C, 0x4E, 0x02, 0x00];
         let value1 = u32_from_le_bytes_ref(&bytes);
         let value2 = u32::from_le_bytes(bytes);
@@ -69,7 +69,7 @@ mod test {
     }
 
     #[test]
-    fn test_converters_be() {
+    fn converters_be() {
         let bytes: [u8; 4] = [0x00, 0x12, 0x75, 0x27];
         let value1 = u32_from_be_bytes_ref(&bytes);
         let value2 = u32::from_be_bytes(bytes);

@@ -2,7 +2,9 @@
 //!
 //! Reimplementation of [https://github.com/adafruit/Adafruit_CircuitPython_Bitmap_Font/blob/main/adafruit_bitmap_font/pcf.py](https://github.com/adafruit/Adafruit_CircuitPython_Bitmap_Font/blob/main/adafruit_bitmap_font/pcf.py)
 //!
-//! PCF specification: [https://fontforge.org/docs/techref/pcf-format.html](https://fontforge.org/docs/techref/pcf-format.html)
+//! PCF fontforge page: [https://fontforge.org/docs/techref/pcf-format.html](https://fontforge.org/docs/techref/pcf-format.html)
+//!
+//! PCF format specification: [https://formats.kaitai.io/pcf_font/index.html](https://formats.kaitai.io/pcf_font/index.html)
 //!
 //! This lib only aims to read the glyphs in PCF fonts and interface with embedded-graphics.
 //! Not all features are implemented.
@@ -274,6 +276,14 @@ impl<T> PcfFont<T> {
         let row_bytes = bytes_per_row(width, 1);
         height * row_bytes
     }
+
+    /// Override the default character.
+    ///
+    /// Whether this field is used depends on the implementation.
+    #[inline]
+    pub fn override_default_char(&mut self, value: u16) {
+        self.default_char = value;
+    }
 }
 
 impl<T> PcfFont<T>
@@ -286,6 +296,8 @@ where
     ///
     /// There might be arbitrary glyph sizes. Use the bounding box or [PcfFont::max_bytes_per_glyph
     /// to calculate the maximum required buffer size.
+    ///
+    /// In some cases the glyph will be empty, while it still needs space when displaying it.
     pub fn read_glyph_raw(
         &mut self,
         code_point: u16,
@@ -399,6 +411,8 @@ impl<T> Debug for PcfFont<T> {
 }
 
 /// Check and load PCF font using given IO buffer.
+///
+/// Use this to load the font, never try it manually.
 pub fn load_pcf_font<T>(mut data: T) -> Result<PcfFont<T>, Error>
 where
     T: io::Read + io::Seek,
@@ -460,7 +474,8 @@ where
     /*  0=>bytes, 1=>shorts, 2=>ints */
     // So 0xE means: MSByte first, MSBit first, glyph row padded to int(4 bytes)
     if table_toc[0].unwrap().format & PCF_SCAN_UNIT_MASK != 0 {
-        // only support bits in bytes
+        // only support bits stored in bytes
+        // having no idea of others though
         return Err(Error::UnsupportedFormat);
     }
     let glyph_row_padding_format = table_toc[0].unwrap().format & PCF_GLYPH_PAD_MASK;
@@ -585,7 +600,8 @@ mod test {
         include_bytes!("../test-fonts/fusion-pixel-12px-monospaced-zh_hans.pcf");
 
     #[test]
-    fn test_loading_pcf_fonts() {
+    #[cfg(feature = "std")]
+    fn std_loading_pcf_fonts() {
         // TODO: give a good example
         let cursor = Cursor::new(FONT_VARIABLE);
         let _ = load_pcf_font(cursor).unwrap();
@@ -594,12 +610,17 @@ mod test {
     }
 
     #[test]
-    fn test_loading_glyphs() {
+    #[cfg(feature = "std")]
+    fn std_loading_glyphs() {
         let mut buffer: [u8; 50] = [0; 50];
         let cursor = Cursor::new(FONT_VARIABLE);
         let mut font = load_pcf_font(cursor).unwrap();
-        let (length, width) = font.read_glyph_raw('德' as u16, &mut buffer).unwrap();
+        let (length, width) = font.read_glyph_raw('聰' as u16, &mut buffer).unwrap();
         println!("data length: {length}, glyph width: {width}");
+        if width == 0 {
+            // in some cases the glyph is 'empty'
+            return;
+        }
         let row_bytes = bytes_per_row(width, 1);
         let height = length / row_bytes;
         for row in 0..height {
