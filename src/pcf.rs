@@ -19,7 +19,7 @@
 //!
 //! TODO: `no_std` io::Seek and io::Read.
 
-use core::fmt::Debug;
+use core::{cell::RefCell, fmt::Debug};
 use num_enum::FromPrimitive;
 #[cfg(feature = "std")]
 use std::io;
@@ -225,7 +225,7 @@ pub enum GlyphPaddingFormat {
 
 #[derive(PartialEq)]
 pub struct PcfFont<T> {
-    data: T,
+    data: RefCell<T>,
     /// Glyph count, informative. Original value is signed.
     glyph_count: u32,
     /// The number of pixels above the baseline of a typical ascender
@@ -322,7 +322,7 @@ where
     ///
     /// In some cases the glyph will be empty, while it still needs space when displaying it.
     pub fn read_glyph_raw(
-        &mut self,
+        &self,
         code_point: u16,
         buf: &mut [u8],
     ) -> Result<(usize, MetricsEntry), Error> {
@@ -339,7 +339,8 @@ where
         };
         // convert all padding scheme to padding to bytes
         let standard_row_bytes = bytes_per_row(glyph_width, 1);
-        self.data.seek(io::SeekFrom::Start(
+        let mut cursor = self.data.borrow_mut();
+        cursor.seek(io::SeekFrom::Start(
             (self.bitmap_data_location + bitmap_offset) as u64,
         ))?;
         let skip_count = original_row_bytes - standard_row_bytes;
@@ -347,9 +348,9 @@ where
         for row in 0..glyph_height {
             let buf_start = row * standard_row_bytes;
             let buf_end = buf_start + standard_row_bytes;
-            self.data.read_exact(&mut buf[buf_start..buf_end])?;
+            cursor.read_exact(&mut buf[buf_start..buf_end])?;
             // skip extra padding bytes
-            self.data.seek_relative(skip_count as i64)?;
+            cursor.seek_relative(skip_count as i64)?;
         }
         // the length of data written, the width of the bitmap
         let length = glyph_height * standard_row_bytes;
@@ -357,7 +358,7 @@ where
     }
 
     /// Gets only the metrics of the glyph, to calculate width without using the glyph
-    pub fn get_glyph_metrics(&mut self, code_point: u16) -> Result<MetricsEntry, Error> {
+    pub fn get_glyph_metrics(&self, code_point: u16) -> Result<MetricsEntry, Error> {
         let glyph_index = self.get_glyph_index(code_point)?;
         if let Ok(value) = self.get_metrics(glyph_index) {
             Ok(value)
@@ -367,7 +368,7 @@ where
         }
     }
 
-    fn get_glyph_index(&mut self, code_point: u16) -> Result<u16, Error> {
+    fn get_glyph_index(&self, code_point: u16) -> Result<u16, Error> {
         let enc1 = (code_point >> 8) & 0xFF;
         let enc2 = code_point & 0xFF;
         if !(self.min_byte1..=self.max_byte1).contains(&enc1)
@@ -380,12 +381,13 @@ where
         let indice_offset = (enc1 - self.min_byte1)
             * (self.max_char_or_byte2 - self.min_char_or_byte2 + 1)
             + (enc2 - self.min_char_or_byte2);
+        let mut cursor = self.data.borrow_mut();
         // NOTE: each indice takes 2 bytes(u16)
-        self.data.seek(io::SeekFrom::Start(
+        cursor.seek(io::SeekFrom::Start(
             (self.encoded_glyph_indices_location + (indice_offset as u32) * 2) as u64,
         ))?;
         let mut buffer: [u8; 2] = [0; 2];
-        self.data.read_exact(&mut buffer[..])?;
+        cursor.read_exact(&mut buffer[..])?;
         let glyph_index = u16::from_be_bytes(buffer);
         // 0xFFFF means there's no matching glyph
         if glyph_index == 0xFFFF {
@@ -395,17 +397,18 @@ where
         }
     }
 
-    fn get_glyph_bitmap_offset(&mut self, glyph_index: u16) -> Result<u32, Error> {
+    fn get_glyph_bitmap_offset(&self, glyph_index: u16) -> Result<u32, Error> {
+        let mut cursor = self.data.borrow_mut();
         let mut buffer: [u8; 4] = [0; 4];
         // NOTE: each glyph location offset takes 4 bytes(u32)
-        self.data.seek(io::SeekFrom::Start(
+        cursor.seek(io::SeekFrom::Start(
             (self.bitmap_position_lut_location + (glyph_index as u32) * 4) as u64,
         ))?;
-        self.data.read_exact(&mut buffer)?;
+        cursor.read_exact(&mut buffer)?;
         Ok(u32::from_be_bytes(buffer))
     }
 
-    fn get_metrics(&mut self, glyph_index: u16) -> Result<MetricsEntry, Error> {
+    fn get_metrics(&self, glyph_index: u16) -> Result<MetricsEntry, Error> {
         if self.metrics_compressed {
             let cursor_offset = self.metrics_data_location + (glyph_index as u32) * 5;
             self.get_metrics_compressed(cursor_offset)
@@ -416,18 +419,20 @@ where
     }
 
     #[inline]
-    fn get_metrics_compressed(&mut self, cursor_offset: u32) -> Result<MetricsEntry, Error> {
-        self.data.seek(io::SeekFrom::Start(cursor_offset as u64))?;
+    fn get_metrics_compressed(&self, cursor_offset: u32) -> Result<MetricsEntry, Error> {
+        let mut cursor = self.data.borrow_mut();
+        cursor.seek(io::SeekFrom::Start(cursor_offset as u64))?;
         let mut buffer: [u8; 5] = [0; 5];
-        self.data.read_exact(&mut buffer)?;
+        cursor.read_exact(&mut buffer)?;
         Ok(MetricsEntry::new_from_compressed(&buffer))
     }
 
     #[inline]
-    fn get_metrics_standard(&mut self, cursor_offset: u32) -> Result<MetricsEntry, Error> {
-        self.data.seek(io::SeekFrom::Start(cursor_offset as u64))?;
+    fn get_metrics_standard(&self, cursor_offset: u32) -> Result<MetricsEntry, Error> {
+        let mut cursor = self.data.borrow_mut();
+        cursor.seek(io::SeekFrom::Start(cursor_offset as u64))?;
         let mut buffer: [u8; 12] = [0; 12];
-        self.data.read_exact(&mut buffer)?;
+        cursor.read_exact(&mut buffer)?;
         Ok(MetricsEntry::new_from_standard(&buffer))
     }
 }
@@ -601,7 +606,7 @@ where
     // );
 
     Ok(PcfFont {
-        data,
+        data: RefCell::new(data),
         glyph_count,
         ascent,
         descent,
@@ -665,7 +670,7 @@ where
     }
 
     fn draw_string_binary<D>(
-        &mut self,
+        &self,
         text: &str,
         position: Point,
         mut target: D,
