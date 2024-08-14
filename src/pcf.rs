@@ -4,7 +4,7 @@
 //!
 //! PCF fontforge page: [https://fontforge.org/docs/techref/pcf-format.html](https://fontforge.org/docs/techref/pcf-format.html)
 //!
-//! PCF format specification: [https://formats.kaitai.io/pcf_font/index.html](https://formats.kaitai.io/pcf_font/index.html)
+//! PCF format specification in kaitai format: [https://formats.kaitai.io/pcf_font/index.html](https://formats.kaitai.io/pcf_font/index.html)
 //!
 //! This lib only aims to read the glyphs in PCF fonts and interface with embedded-graphics.
 //! Not all features are implemented.
