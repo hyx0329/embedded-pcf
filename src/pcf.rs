@@ -112,8 +112,8 @@ struct TableTocEntry {
 
 /// Uncompressed metrics data
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-struct MetricsEntry {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MetricsEntry {
     left_side_bearing: i16,
     right_side_bearing: i16,
     character_width: i16,
@@ -149,6 +149,20 @@ impl MetricsEntry {
             character_descent: i16_from_be_bytes_ref(&data[8..=10]),
             character_attributes: u16_from_be_bytes_ref(&data[10..=12]),
         }
+    }
+
+    /// Gets the width of the glyph.
+    ///
+    /// Note this is different from the field [MetricsEntry::character_width].
+    #[inline]
+    pub fn glyph_width(&self) -> i16 {
+        self.right_side_bearing - self.left_side_bearing
+    }
+
+    /// Gets the height of the glyph.
+    #[inline]
+    pub fn glyph_height(&self) -> i16 {
+        self.character_ascent + self.character_descent
     }
 }
 
@@ -290,8 +304,10 @@ impl<T> PcfFont<T>
 where
     T: io::Read + io::Seek,
 {
-    /// Read raw glyph data of the given code_point, return `(length, width)`
-    /// where `length` is the length of data written, the `width` is the glyph's width.
+    /// Read raw glyph data of the given code_point, return `(length, metrics)`
+    /// where `length` is the length of data written, the `metrics` is the glyph's metrics to help
+    /// displaying the glyph.
+    ///
     /// Glyph rows are always padded to bytes.
     ///
     /// There might be arbitrary glyph sizes. Use the bounding box or [PcfFont::max_bytes_per_glyph
@@ -302,13 +318,13 @@ where
         &mut self,
         code_point: u16,
         buf: &mut [u8],
-    ) -> Result<(usize, usize), Error> {
+    ) -> Result<(usize, MetricsEntry), Error> {
         let glyph_index = self.get_glyph_index(code_point)?;
         let bitmap_offset = self.get_glyph_bitmap_offset(glyph_index)?;
         let metrics = self.get_metrics(glyph_index)?;
 
-        let glyph_width = (metrics.right_side_bearing - metrics.left_side_bearing) as usize;
-        let glyph_height = (metrics.character_ascent + metrics.character_descent) as usize;
+        let glyph_width = metrics.glyph_width() as usize;
+        let glyph_height = metrics.glyph_height() as usize;
         let original_row_bytes = match self.glyph_row_padding_format {
             GlyphPaddingFormat::Byte => bytes_per_row(glyph_width, 1),
             GlyphPaddingFormat::Short => bytes_per_row(glyph_width, 2),
@@ -330,7 +346,7 @@ where
         }
         // the length of data written, the width of the bitmap
         let length = glyph_height * standard_row_bytes;
-        Ok((length, glyph_width))
+        Ok((length, metrics))
     }
 
     fn get_glyph_index(&mut self, code_point: u16) -> Result<u16, Error> {
@@ -615,7 +631,8 @@ mod test {
         let mut buffer: [u8; 50] = [0; 50];
         let cursor = Cursor::new(FONT_VARIABLE);
         let mut font = load_pcf_font(cursor).unwrap();
-        let (length, width) = font.read_glyph_raw('聰' as u16, &mut buffer).unwrap();
+        let (length, metrics) = font.read_glyph_raw('聰' as u16, &mut buffer).unwrap();
+        let width = metrics.glyph_width() as usize;
         println!("data length: {length}, glyph width: {width}");
         if width == 0 {
             // in some cases the glyph is 'empty'
