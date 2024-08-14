@@ -283,7 +283,7 @@ where
     /// Read raw glyph data of the given code_point, return `(length, width)`
     /// where `length` is the length of data written, the `width` is the glyph's width.
     /// Glyph rows are always padded to bytes.
-    /// 
+    ///
     /// There might be arbitrary glyph sizes. Use the bounding box or [PcfFont::max_bytes_per_glyph
     /// to calculate the maximum required buffer size.
     pub fn read_glyph_raw(
@@ -304,7 +304,9 @@ where
         };
         // convert all padding scheme to padding to bytes
         let standard_row_bytes = bytes_per_row(glyph_width, 1);
-        self.data.seek(io::SeekFrom::Start((self.bitmap_data_location + bitmap_offset) as u64))?;
+        self.data.seek(io::SeekFrom::Start(
+            (self.bitmap_data_location + bitmap_offset) as u64,
+        ))?;
         let skip_count = original_row_bytes - standard_row_bytes;
         // NOTE: this procedure is for MSBit-first glyphs
         for row in 0..glyph_height {
@@ -329,7 +331,8 @@ where
         }
 
         // for 1 or 2 bytes encoding, the procedure is the same.
-        let indice_offset = (enc1 - self.min_byte1) * (self.max_char_or_byte2 - self.min_char_or_byte2 + 1)
+        let indice_offset = (enc1 - self.min_byte1)
+            * (self.max_char_or_byte2 - self.min_char_or_byte2 + 1)
             + (enc2 - self.min_char_or_byte2);
         // NOTE: each indice takes 2 bytes(u16)
         self.data.seek(io::SeekFrom::Start(
@@ -465,9 +468,8 @@ where
     if glyph_row_padding_format == PCF_GLYPH_PAD_MASK {
         return Err(Error::CorruptedData);
     }
-    let glyph_row_padding_format = GlyphPaddingFormat::from_primitive(
-        glyph_row_padding_format as u8
-    );
+    let glyph_row_padding_format =
+        GlyphPaddingFormat::from_primitive(glyph_row_padding_format as u8);
 
     // reconstruct the data
 
