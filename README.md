@@ -23,7 +23,7 @@ It contains:
 - glyph names lookup table
 - and others
 
-*Read https://formats.kaitai.io/pcf_font/index.html and that's really an interesting tool.*
+*Read <https://formats.kaitai.io/pcf_font/index.html> and that's really an interesting tool.*
 
 To read matching glyphs from PCF font file:
 
