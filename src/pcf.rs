@@ -26,8 +26,8 @@ use std::io;
 
 use embedded_graphics::{
     image::{Image, ImageRaw},
-    prelude::PixelColor,
-    text::{renderer::TextRenderer, DecorationColor},
+    prelude::{DrawTarget, PixelColor, Point},
+    text::{renderer::TextRenderer, Baseline, DecorationColor},
 };
 
 use crate::utils::*;
@@ -350,6 +350,12 @@ where
         Ok((length, metrics))
     }
 
+    /// Gets only the metrics of the glyph, to calculate width without using the glyph
+    pub fn get_glyph_metrics(&mut self, code_point: u16) -> Result<MetricsEntry, Error> {
+        let glyph_index = self.get_glyph_index(code_point)?;
+        self.get_metrics(glyph_index)
+    }
+
     fn get_glyph_index(&mut self, code_point: u16) -> Result<u16, Error> {
         let enc1 = (code_point >> 8) & 0xFF;
         let enc2 = code_point & 0xFF;
@@ -618,6 +624,7 @@ where
     T: io::Read + io::Seek,
     C: PixelColor,
 {
+    /// Initialize a PcfFontStyle, default all transparent/disabled
     pub fn new(font: &'a mut PcfFont<T>) -> Self {
         Self {
             text_color: None,
@@ -626,6 +633,60 @@ where
             strikethrough_color: DecorationColor::None,
             font,
         }
+    }
+
+    pub fn is_transparent(&self) -> bool {
+        self.text_color.is_none()
+            && self.background_color.is_none()
+            && self.underline_color.is_none()
+            && self.strikethrough_color.is_none()
+    }
+}
+
+impl<C, T> TextRenderer for PcfFontStyle<'_, C, T>
+where
+    C: PixelColor,
+    T: io::Read + io::Seek,
+{
+    type Color = C;
+
+    fn draw_string<D>(
+        &self,
+        text: &str,
+        position: Point,
+        baseline: Baseline,
+        target: &mut D,
+    ) -> Result<Point, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        todo!()
+    }
+
+    fn draw_whitespace<D>(
+        &self,
+        width: u32,
+        position: Point,
+        baseline: Baseline,
+        target: &mut D,
+    ) -> Result<Point, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        todo!()
+    }
+
+    fn measure_string(
+        &self,
+        text: &str,
+        position: Point,
+        baseline: Baseline,
+    ) -> embedded_graphics::text::renderer::TextMetrics {
+        todo!()
+    }
+
+    fn line_height(&self) -> u32 {
+        todo!()
     }
 }
 
