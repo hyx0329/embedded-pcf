@@ -26,7 +26,8 @@ use std::io;
 
 use embedded_graphics::{
     image::{Image, ImageRaw},
-    text::renderer::TextRenderer,
+    prelude::PixelColor,
+    text::{renderer::TextRenderer, DecorationColor},
 };
 
 use crate::utils::*;
@@ -600,6 +601,32 @@ where
         bitmap_data_location,
         metrics_data_location,
     })
+}
+
+#[derive(Debug, PartialEq)]
+#[non_exhaustive]
+pub struct PcfFontStyle<'a, T, C> {
+    pub text_color: Option<C>,
+    pub background_color: Option<C>,
+    pub underline_color: DecorationColor<C>,
+    pub strikethrough_color: DecorationColor<C>,
+    pub font: &'a mut PcfFont<T>,
+}
+
+impl<'a, T, C> PcfFontStyle<'a, T, C>
+where
+    T: io::Read + io::Seek,
+    C: PixelColor,
+{
+    pub fn new(font: &'a mut PcfFont<T>) -> Self {
+        Self {
+            text_color: None,
+            background_color: None,
+            underline_color: DecorationColor::None,
+            strikethrough_color: DecorationColor::None,
+            font,
+        }
+    }
 }
 
 #[cfg(test)]
