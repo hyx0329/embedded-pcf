@@ -7,8 +7,6 @@ the dependency of some IO traits([std::io::Seek], [std::io::Read]).
 
 It's not a complete implementation. Some PCF fonts may not be supported.
 
-Due to trait limitation on mutability in embedded-graphics, this lib cannot work with [embedded_graphics::text::Text].
-
 ## Motivation
 
 I want to use bitmap fonts like what it does [on CircuitPython](https://github.com/adafruit/Adafruit_CircuitPython_Bitmap_Font).
