@@ -730,7 +730,9 @@ where
                             &buf[..length],
                             metrics.glyph_width() as u32,
                         );
-                        Image::new(&glyph, position).draw(&mut target)?;
+                        // TODO: fill background
+                        let offset = Point::new(metrics.left_side_bearing as i32, -metrics.character_ascent as i32);
+                        Image::new(&glyph, position + offset).draw(&mut target)?;
                         position.x += metrics.character_width as i32;
                     }
                 }
@@ -746,7 +748,9 @@ where
                                 &buf[..length],
                                     metrics.glyph_width() as u32,
                                 );
-                                Image::new(&glyph, position).draw(&mut target)?;
+                                // TODO: fill background
+                                let offset = Point::new(metrics.left_side_bearing as i32, -metrics.character_ascent as i32);
+                                Image::new(&glyph, position + offset).draw(&mut target)?;
                                 position.x += metrics.character_width as i32;
                             }
                         }
