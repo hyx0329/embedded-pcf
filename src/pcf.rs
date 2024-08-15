@@ -634,7 +634,7 @@ where
     })
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[non_exhaustive]
 pub struct PcfFontStyle<'a, T, C> {
     pub text_color: Option<C>,
@@ -645,7 +645,9 @@ pub struct PcfFontStyle<'a, T, C> {
 }
 
 impl<'a, T, C> PcfFontStyle<'a, T, C>
-where C: PixelColor {
+where
+    C: PixelColor,
+{
     pub fn set_text_color(&mut self, color: C) {
         self.text_color = Some(color)
     }
@@ -680,7 +682,6 @@ where
 
     /// Returns the vertical offset between the line position and the top edge of the bounding box.
     fn baseline_offset(&self, baseline: Baseline) -> i32 {
-        // TODO: verify actual behavior
         match baseline {
             Baseline::Top => 0,
             Baseline::Bottom => self.font.bounding_box.1 as i32,
@@ -723,6 +724,17 @@ where
                 Ok((length, metrics)) => {
                     if length == 0 {
                         // invisible char
+                        let offset = Point::new(0, -metrics.character_ascent as i32);
+                        target.fill_solid(
+                            &Rectangle::new(
+                                position + offset,
+                                Size::new(
+                                    metrics.character_width as u32,
+                                    self.font.bounding_box.1 as u32,
+                                ),
+                            ),
+                            BinaryColor::Off,
+                        )?;
                         position.x += metrics.character_width as i32;
                     } else {
                         // map a glyph and paint it
@@ -730,32 +742,17 @@ where
                             &buf[..length],
                             metrics.glyph_width() as u32,
                         );
-                        // TODO: fill background
-                        let offset = Point::new(metrics.left_side_bearing as i32, -metrics.character_ascent as i32);
+                        let offset = Point::new(
+                            metrics.left_side_bearing as i32,
+                            -metrics.character_ascent as i32
+                            + (self.font.bounding_box.1 + self.font.bounding_box.3) as i32
+                        );
                         Image::new(&glyph, position + offset).draw(&mut target)?;
                         position.x += metrics.character_width as i32;
                     }
                 }
                 Err(Error::NotFound) => {
-                    match self.font.read_glyph_raw(self.font.default_char, &mut buf) {
-                        Ok((length, metrics)) => {
-                            if length == 0 {
-                                // invisible char
-                                position.x += metrics.character_width as i32;
-                            } else {
-                                // map a glyph and paint it
-                                let glyph = ImageRaw::<BinaryColor>::new(
-                                &buf[..length],
-                                    metrics.glyph_width() as u32,
-                                );
-                                // TODO: fill background
-                                let offset = Point::new(metrics.left_side_bearing as i32, -metrics.character_ascent as i32);
-                                Image::new(&glyph, position + offset).draw(&mut target)?;
-                                position.x += metrics.character_width as i32;
-                            }
-                        }
-                        Err(_) => { /* Just ignore the errors, assume those are 0-width */ }
-                    }
+                    todo!("wait for the previous part")
                 }
                 Err(_) => { /* Just ignore the errors, assume those are 0-width */ }
             };
