@@ -247,7 +247,7 @@ pub struct BoundingBox {
     pub height: i16,
     /// aka x_offset
     pub min_left_bearing: i16,
-    /// aka y_offset, relative value, usually negative.
+    /// aka y_offset, signed value, usually negative, meaning below the baseline.
     pub max_descent: i16,
 }
 
@@ -701,17 +701,17 @@ where
 
     /// the the glyphs drawing offset based on current baseline configuration.
     fn baseline_offset(&self, baseline: Baseline) -> i32 {
-        // match baseline {
-        //     Baseline::Top => (self.font.bounding_box.1 + self.font.bounding_box.3) as i32,
-        //     Baseline::Bottom => self.font.bounding_box.3 as i32,
-        //     Baseline::Middle => (self.font.bounding_box.1 / 2 + self.font.bounding_box.3) as i32,
-        //     Baseline::Alphabetic => 0,
-        // }
+        // The `1`s to add are required to use lower edge as the alphabetic baseline,
+        // matching other fonts behavior.
         match baseline {
-            Baseline::Top => 0,
-            Baseline::Bottom => 0,
-            Baseline::Middle => 0,
-            Baseline::Alphabetic => 0,
+            // Bounding box top pixel coincide with position pixel
+            Baseline::Top => (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32,
+            // Bounding box bottom pixel coincide with position pixel
+            Baseline::Bottom => (1 + self.font.bounding_box.max_descent) as i32,
+            // The bottom edge of the position pixel split the bounding box to 2 halves, and the lower half may be bigger
+            Baseline::Middle => (1 + self.font.bounding_box.height / 2 + self.font.bounding_box.max_descent) as i32,
+            // position pixel's lower edge coincide with font's baseline
+            Baseline::Alphabetic => 1,
         }
     }
 
@@ -730,10 +730,10 @@ where
         Ok(())
     }
 
-    /// Draw the string, binary color.
+    /// Draw the string, binary color, alphabetic baseline is the upper edge of the given pixel/location.
     /// 
-    /// The position given is recognized as one pixel above the baseline(no thick), which
-    /// is the lowest pixel in the glyph's ascending part.
+    /// Be careful that embedded-graphics actually uses the lower edge of
+    /// the given pixel/location as the alphabetic baseline.
     fn draw_string_binary<D>(
         &self,
         text: &str,
@@ -747,14 +747,7 @@ where
         We have only ascending & descending information and glyphs need offsets to be aligned
         at font's baseline(not the top of the visible pixels). This is done by substracting
         character_ascent(absolute value) from the Y-Axis while drawing each character.
-
-        Because the character_descent assumes the baseline has zero thickness, if we want all
-        ascending parts above the baseline, that is, using the lowest row at ascending part
-        as the reference baseline(1 pixel) instead of the highest row at the descending part,
-        an offset of 1 is required. This is required to keep the behavior same with other fonts
-        in embedded-graphics.
         */
-        position.y += 1;
 
         // this buffer should be sufficient for glyphs size below 16*16
         let mut buf: [u8; 40] = [0; 40];
@@ -802,8 +795,6 @@ where
                 _ => { /* Just ignore the rest, assume those are 0-width */ }
             };
         }
-        // restore the position change
-        position.y -= 1;
         Ok(position)
     }
 }
