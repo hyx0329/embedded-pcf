@@ -861,15 +861,16 @@ where
     fn draw_whitespace<D>(
         &self,
         width: u32,
-        position: Point,
+        mut position: Point,
         baseline: Baseline,
         target: &mut D,
     ) -> Result<Point, D::Error>
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        let position = position + Point::new(0, self.baseline_offset(baseline));
         if width != 0 {
+            let max_ascent = (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32;
+            position.y += self.baseline_offset(baseline) - max_ascent;
             if let Some(background_color) = self.background_color {
                 target.fill_solid(
                     &Rectangle::new(position, Size::new(width, self.font.bounding_box.height as u32)),
@@ -877,10 +878,14 @@ where
                 )?;
             }
 
+            position.y += max_ascent;
             self.draw_decorations(width, position, target)?;
+            position.y -= self.baseline_offset(baseline);
+            position.x += width.saturating_as::<i32>();
+            Ok(position)
+        } else {
+            Ok(position)
         }
-
-        Ok(position - Point::new(width.saturating_as(), self.baseline_offset(baseline)))
     }
 
     fn measure_string(
