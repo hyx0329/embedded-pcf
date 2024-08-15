@@ -3,7 +3,7 @@ use embedded_graphics_simulator::{
 };
 
 use embedded_graphics::{
-    mono_font::{ascii::{FONT_4X6, FONT_6X10}, iso_8859_13::FONT_10X20, MonoTextStyle}, pixelcolor::Rgb565, prelude::*, primitives::{Line, PrimitiveStyle}, text::{Alignment, Baseline, Text, TextStyleBuilder}
+    mono_font::{ascii::{FONT_4X6, FONT_6X10}, iso_8859_13::FONT_10X20, MonoTextStyle}, pixelcolor::Rgb565, prelude::*, primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StyledDrawable}, text::{renderer::TextRenderer, Alignment, Baseline, Text, TextStyleBuilder}
 };
 
 use embedded_pcf::{load_pcf_font, PcfFont, PcfFontStyle};
@@ -47,12 +47,18 @@ fn main() {
         .build();
 
     let cjk_center = 50;
-    let cjk_text = "Worjg!9; 嗨！";
+    let cjk_text = "Worjg!9; 嗨！ ";
 
     Line::new(Point::new(0, cjk_center), Point::new(320, cjk_center))
         .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
         .draw(&mut display)
         .unwrap();
+
+    let box_style = PrimitiveStyleBuilder::new()
+        .stroke_color(Rgb565::YELLOW)
+        .stroke_width(1)
+        .reset_fill_color()
+        .build();
 
     for (i, style) in [centered_bottom, centered_middle, centered_top, centered_alpha].iter().enumerate() {
         let position = Point::new(-50 + 70 * (i as i32 +1), cjk_center);
@@ -64,6 +70,8 @@ fn main() {
         )
         .draw(&mut display)
         .unwrap();
+        let text_metrics = cn_font_style.measure_string(cjk_text, position, style.baseline);
+        text_metrics.bounding_box.draw_styled(&box_style, &mut display).unwrap();
         Pixel(position, Rgb565::GREEN)
             .draw(&mut display)
             .unwrap();

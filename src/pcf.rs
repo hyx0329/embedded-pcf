@@ -894,8 +894,8 @@ where
         position: Point,
         baseline: Baseline,
     ) -> embedded_graphics::text::renderer::TextMetrics {
-        // TODO: optimize for mono fonts
-        let bb_position = position + Point::new(0, self.baseline_offset(baseline));
+        // be careful about the drawing baseline 1px offset
+        let bb_position = position + Point::new(0, self.baseline_offset(baseline) - self.baseline_offset(Baseline::Top));
         let default_width = self.font.bounding_box.width as u32;
         let bb_width = text
             .chars()
@@ -905,7 +905,7 @@ where
             })
             .sum();
 
-        // TODO: decoration height
+        // TODO: decoration height(underline)
         let bb_height = self.font.bounding_box.height as u32;
         let bb_size = Size::new(bb_width, bb_height);
 
