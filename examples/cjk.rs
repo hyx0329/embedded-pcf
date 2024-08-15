@@ -3,7 +3,7 @@ use embedded_graphics_simulator::{
 };
 
 use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyle}, pixelcolor::Rgb565, prelude::*, primitives::{Line, PrimitiveStyle}, text::{Alignment, Baseline, Text, TextStyleBuilder}
+    mono_font::{ascii::{FONT_4X6, FONT_6X10}, iso_8859_13::FONT_10X20, MonoTextStyle}, pixelcolor::Rgb565, prelude::*, primitives::{Line, PrimitiveStyle}, text::{Alignment, Baseline, Text, TextStyleBuilder}
 };
 
 use embedded_pcf::{load_pcf_font, PcfFont, PcfFontStyle};
@@ -24,61 +24,73 @@ fn main() {
     cn_font_style.set_text_color(Rgb565::WHITE);
     cn_font_style.set_background_color(Rgb565::BLACK);
 
-    let en_font_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+    let en_font_style = MonoTextStyle::new(&FONT_4X6, Rgb565::WHITE);
 
     let centered_bottom = TextStyleBuilder::new()
         .baseline(Baseline::Bottom)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .build();
 
     let centered_middle = TextStyleBuilder::new()
         .baseline(Baseline::Middle)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .build();
 
     let centered_top = TextStyleBuilder::new()
         .baseline(Baseline::Top)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .build();
 
     let centered_alpha = TextStyleBuilder::new()
         .baseline(Baseline::Alphabetic)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .build();
 
-    let cn_center = 50;
+    let cjk_center = 50;
+    let cjk_text = "Worjg! 嗨！";
+
+    Line::new(Point::new(0, cjk_center), Point::new(320, cjk_center))
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
+        .draw(&mut display)
+        .unwrap();
+
     for (i, style) in [centered_bottom, centered_middle, centered_top, centered_alpha].iter().enumerate() {
+        let position = Point::new(-50 + 70 * (i as i32 +1), cjk_center);
         Text::with_text_style(
-            "World! 嗨！",
-            Point::new(64 * (i as i32 +1), cn_center),
+            cjk_text,
+            position,
             cn_font_style.clone(),
             *style,
         )
         .draw(&mut display)
         .unwrap();
-    }
-
-    let en_center = 190;
-    for (i, style) in [centered_bottom, centered_middle, centered_top, centered_alpha].iter().enumerate() {
-            Text::with_text_style(
-                "World! Hi!",
-                Point::new(64 * (i as i32 +1), en_center),
-                en_font_style.clone(),
-                *style,
-            )
+        Pixel(position, Rgb565::GREEN)
             .draw(&mut display)
             .unwrap();
-        }
+    }
 
-    Line::new(Point::new(0, cn_center), Point::new(320, cn_center))
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
-        .draw(&mut display)
-        .unwrap();
+    let en_center = 80;
+    let en_text = "Worjg! Hi!";
 
     Line::new(Point::new(0, en_center), Point::new(320, en_center))
         .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
         .draw(&mut display)
         .unwrap();
+
+    for (i, style) in [centered_bottom, centered_middle, centered_top, centered_alpha].iter().enumerate() {
+            let position = Point::new(-50 + 70 * (i as i32 +1), en_center);
+            Text::with_text_style(
+                en_text,
+                position,
+                en_font_style.clone(),
+                *style,
+            )
+            .draw(&mut display)
+            .unwrap();
+            Pixel(position, Rgb565::GREEN)
+                .draw(&mut display)
+                .unwrap();
+        }
 
     Pixel(display.bounding_box().center(), Rgb565::GREEN)
         .draw(&mut display)

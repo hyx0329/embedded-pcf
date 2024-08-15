@@ -124,6 +124,15 @@ struct TableTocEntry {
 }
 
 /// Uncompressed metrics data
+///
+/// All glyphs in PCF uses ascent & descent to describe the glyphs Y cordinate.
+/// character_ascent(absolute value) tells how many pixels above the baseline(no thick),
+/// while character_descent(absolute value) tells how many pixels below the baseline(no thick).
+/// left_side_bearing tells the starting x-axis of the first visible pixel,
+/// while right_side_bearing tells the starting x-axis after the last visible pixel.
+/// So glyph height is given by character_ascent + character_descent,
+/// and glyph width is given by right_side_bearing - left_side_bearing.
+/// The glyphs are all tightly packed so no transparent border exists.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MetricsEntry {
@@ -232,6 +241,16 @@ pub enum GlyphPaddingFormat {
     Int,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoundingBox {
+    pub width: i16,
+    pub height: i16,
+    /// aka x_offset
+    pub min_left_bearing: i16,
+    /// aka y_offset, relative value, usually negative.
+    pub max_descent: i16,
+}
+
 #[derive(PartialEq)]
 pub struct PcfFont<T> {
     data: RefCell<T>,
@@ -244,7 +263,7 @@ pub struct PcfFont<T> {
     /// Whether metrics are compressed.
     metrics_compressed: bool,
     /// The maximum glyph size as a 4-tuple of: width, height, x_offset, y_offset
-    bounding_box: (i16, i16, i16, i16),
+    bounding_box: BoundingBox,
 
     glyph_row_padding_format: GlyphPaddingFormat,
     // the 4 fields below actually only contains data of u8 size.
@@ -273,7 +292,7 @@ pub struct PcfFont<T> {
 impl<T> PcfFont<T> {
     /// The maximum glyph size as a 4-tuple of: width, height, x_offset, y_offset
     #[inline]
-    pub fn bounding_box(&self) -> (i16, i16, i16, i16) {
+    pub fn bounding_box(&self) -> BoundingBox {
         self.bounding_box
     }
 
@@ -301,8 +320,8 @@ impl<T> PcfFont<T> {
 
     #[inline]
     pub fn max_bytes_per_glyph(&self) -> usize {
-        let width = self.bounding_box.0 as usize;
-        let height = self.bounding_box.1 as usize;
+        let width = self.bounding_box.width as usize;
+        let height = self.bounding_box.height as usize;
         let row_bytes = bytes_per_row(width, 1);
         height * row_bytes
     }
@@ -595,12 +614,12 @@ where
         let maxbounds = MetricsEntry::new_from_standard(&buffer);
         let width = maxbounds.right_side_bearing - minbounds.left_side_bearing;
         let height = maxbounds.character_ascent + maxbounds.character_descent;
-        (
+        BoundingBox {
             width,
             height,
-            minbounds.left_side_bearing,
-            -maxbounds.character_descent,
-        )
+            min_left_bearing: minbounds.left_side_bearing,
+            max_descent: -maxbounds.character_descent,
+        }
     };
 
     let bitmap_position_lut_location = table_toc[0].unwrap().offset + 4 + 4;
@@ -680,13 +699,19 @@ where
             && self.strikethrough_color.is_none()
     }
 
-    /// Returns the vertical offset between the line position and the top edge of the bounding box.
+    /// the the glyphs drawing offset based on current baseline configuration.
     fn baseline_offset(&self, baseline: Baseline) -> i32 {
+        // match baseline {
+        //     Baseline::Top => (self.font.bounding_box.1 + self.font.bounding_box.3) as i32,
+        //     Baseline::Bottom => self.font.bounding_box.3 as i32,
+        //     Baseline::Middle => (self.font.bounding_box.1 / 2 + self.font.bounding_box.3) as i32,
+        //     Baseline::Alphabetic => 0,
+        // }
         match baseline {
             Baseline::Top => 0,
-            Baseline::Bottom => self.font.bounding_box.1 as i32,
-            Baseline::Middle => (self.font.bounding_box.1 / 2) as i32,
-            Baseline::Alphabetic => (self.font.bounding_box.1 + self.font.bounding_box.3) as i32,
+            Baseline::Bottom => 0,
+            Baseline::Middle => 0,
+            Baseline::Alphabetic => 0,
         }
     }
 
@@ -705,6 +730,10 @@ where
         Ok(())
     }
 
+    /// Draw the string, binary color.
+    /// 
+    /// The position given is recognized as one pixel above the baseline(no thick), which
+    /// is the lowest pixel in the glyph's ascending part.
     fn draw_string_binary<D>(
         &self,
         text: &str,
@@ -714,8 +743,18 @@ where
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        // draw PCF glyphs directly without spacing, unless character width is
-        // bigger than the glyph width
+        /*
+        We have only ascending & descending information and glyphs need offsets to be aligned
+        at font's baseline(not the top of the visible pixels). This is done by substracting
+        character_ascent(absolute value) from the Y-Axis while drawing each character.
+
+        Because the character_descent assumes the baseline has zero thickness, if we want all
+        ascending parts above the baseline, that is, using the lowest row at ascending part
+        as the reference baseline(1 pixel) instead of the highest row at the descending part,
+        an offset of 1 is required. This is required to keep the behavior same with other fonts
+        in embedded-graphics.
+        */
+        position.y += 1;
 
         // this buffer should be sufficient for glyphs size below 16*16
         let mut buf: [u8; 40] = [0; 40];
@@ -723,40 +762,48 @@ where
             match self.font.read_glyph_raw(c as u16, &mut buf) {
                 Ok((length, metrics)) => {
                     if length == 0 {
-                        // invisible char
-                        let offset = Point::new(0, -metrics.character_ascent as i32);
+                        // invisible char, but has width
+                        let max_ascent = self.font.bounding_box.height + self.font.bounding_box.max_descent;
+                        let offset = Point::new(0, -max_ascent as i32);
                         target.fill_solid(
                             &Rectangle::new(
                                 position + offset,
                                 Size::new(
                                     metrics.character_width as u32,
-                                    self.font.bounding_box.1 as u32,
+                                    self.font.bounding_box.height as u32,
                                 ),
                             ),
-                            BinaryColor::Off,
+                            BinaryColor::On,
                         )?;
                         position.x += metrics.character_width as i32;
                     } else {
+                        // TODO: fill space around glyphs
                         // map a glyph and paint it
                         let glyph = ImageRaw::<BinaryColor>::new(
                             &buf[..length],
                             metrics.glyph_width() as u32,
                         );
+                        // Y index Zero is the top line.
+                        // glyphs are aligned to the top active pixel, reduce Y by `ascent - 1` to
+                        // align them at the baseline. Now everything sits on the baseline.
+                        // X need to offset by left_side_bearing to add a necessary gap between current glyph
+                        // and the previous one.
                         let offset = Point::new(
                             metrics.left_side_bearing as i32,
-                            -metrics.character_ascent as i32
-                            + (self.font.bounding_box.1 + self.font.bounding_box.3) as i32
+                            (-metrics.character_ascent) as i32,
                         );
                         Image::new(&glyph, position + offset).draw(&mut target)?;
                         position.x += metrics.character_width as i32;
                     }
                 }
                 Err(Error::NotFound) => {
-                    todo!("wait for the previous part")
+                    // TODO: wait for the previous part, ignored for the moment
                 }
-                Err(_) => { /* Just ignore the errors, assume those are 0-width */ }
+                _ => { /* Just ignore the rest, assume those are 0-width */ }
             };
         }
+        // restore the position change
+        position.y -= 1;
         Ok(position)
     }
 }
@@ -778,7 +825,8 @@ where
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        let position = position - Point::new(0, self.baseline_offset(baseline));
+        // apply baseline offset
+        let position = position + Point::new(0, self.baseline_offset(baseline));
 
         let next = match (self.text_color, self.background_color) {
             (Some(text_color), Some(background_color)) => self.draw_string_binary(
@@ -797,7 +845,7 @@ where
                 MonoFontDrawTarget::new(target, Background(background_color)),
             )?,
             (None, None) => {
-                let default_width = self.font.bounding_box.0 as u32;
+                let default_width = self.font.bounding_box.width as u32;
                 let dx = text
                     .chars()
                     .map(|c| match self.font.get_glyph_metrics(c as u16) {
@@ -815,7 +863,8 @@ where
             self.draw_decorations(width, position, target)?;
         }
 
-        Ok(next + Point::new(0, self.baseline_offset(baseline)))
+        // restore baseline offset
+        Ok(next - Point::new(0, self.baseline_offset(baseline)))
     }
 
     fn draw_whitespace<D>(
@@ -828,11 +877,11 @@ where
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        let position = position - Point::new(0, self.baseline_offset(baseline));
+        let position = position + Point::new(0, self.baseline_offset(baseline));
         if width != 0 {
             if let Some(background_color) = self.background_color {
                 target.fill_solid(
-                    &Rectangle::new(position, Size::new(width, self.font.bounding_box.1 as u32)),
+                    &Rectangle::new(position, Size::new(width, self.font.bounding_box.height as u32)),
                     background_color,
                 )?;
             }
@@ -840,7 +889,7 @@ where
             self.draw_decorations(width, position, target)?;
         }
 
-        Ok(position + Point::new(width.saturating_as(), self.baseline_offset(baseline)))
+        Ok(position - Point::new(width.saturating_as(), self.baseline_offset(baseline)))
     }
 
     fn measure_string(
@@ -850,8 +899,8 @@ where
         baseline: Baseline,
     ) -> embedded_graphics::text::renderer::TextMetrics {
         // TODO: optimize for mono fonts
-        let bb_position = position - Point::new(0, self.baseline_offset(baseline));
-        let default_width = self.font.bounding_box.0 as u32;
+        let bb_position = position + Point::new(0, self.baseline_offset(baseline));
+        let default_width = self.font.bounding_box.width as u32;
         let bb_width = text
             .chars()
             .map(|c| match self.font.get_glyph_metrics(c as u16) {
@@ -861,7 +910,7 @@ where
             .sum();
 
         // TODO: decoration height
-        let bb_height = self.font.bounding_box.1 as u32;
+        let bb_height = self.font.bounding_box.height as u32;
         let bb_size = Size::new(bb_width, bb_height);
 
         TextMetrics {
@@ -871,7 +920,7 @@ where
     }
 
     fn line_height(&self) -> u32 {
-        self.font.bounding_box.1 as u32
+        self.font.bounding_box.height as u32
     }
 }
 
@@ -905,7 +954,7 @@ mod test {
         let cursor = Cursor::new(FONT_VARIABLE);
         let font = load_pcf_font(cursor).unwrap();
         println!("font: {:?}", font);
-        let (length, metrics) = font.read_glyph_raw('聰' as u16, &mut buffer).unwrap();
+        let (length, metrics) = font.read_glyph_raw('嗨' as u16, &mut buffer).unwrap();
         let width = metrics.glyph_width() as usize;
         println!("data length: {length}, glyph width: {width}");
         if width == 0 {
