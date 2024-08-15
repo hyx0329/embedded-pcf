@@ -705,11 +705,15 @@ where
         // matching other fonts behavior.
         match baseline {
             // Bounding box top pixel coincide with position pixel
-            Baseline::Top => (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32,
+            Baseline::Top => {
+                (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32
+            }
             // Bounding box bottom pixel coincide with position pixel
             Baseline::Bottom => (1 + self.font.bounding_box.max_descent) as i32,
             // The bottom edge of the position pixel split the bounding box to 2 halves, and the lower half may be bigger
-            Baseline::Middle => (1 + self.font.bounding_box.height / 2 + self.font.bounding_box.max_descent) as i32,
+            Baseline::Middle => {
+                (1 + self.font.bounding_box.height / 2 + self.font.bounding_box.max_descent) as i32
+            }
             // position pixel's lower edge coincide with font's baseline
             Baseline::Alphabetic => 1,
         }
@@ -731,7 +735,7 @@ where
     }
 
     /// Draw the string, binary color, alphabetic baseline is the upper edge of the given pixel/location.
-    /// 
+    ///
     /// Be careful that embedded-graphics actually uses the lower edge of
     /// the given pixel/location as the alphabetic baseline.
     fn draw_string_binary<D>(
@@ -756,7 +760,8 @@ where
                 Ok((length, metrics)) => {
                     if length == 0 {
                         // invisible char, but has width
-                        let max_ascent = self.font.bounding_box.height + self.font.bounding_box.max_descent;
+                        let max_ascent =
+                            self.font.bounding_box.height + self.font.bounding_box.max_descent;
                         let offset = Point::new(0, -max_ascent as i32);
                         target.fill_solid(
                             &Rectangle::new(
@@ -869,11 +874,15 @@ where
         D: DrawTarget<Color = Self::Color>,
     {
         if width != 0 {
-            let max_ascent = (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32;
+            let max_ascent =
+                (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32;
             position.y += self.baseline_offset(baseline) - max_ascent;
             if let Some(background_color) = self.background_color {
                 target.fill_solid(
-                    &Rectangle::new(position, Size::new(width, self.font.bounding_box.height as u32)),
+                    &Rectangle::new(
+                        position,
+                        Size::new(width, self.font.bounding_box.height as u32),
+                    ),
                     background_color,
                 )?;
             }
@@ -895,7 +904,11 @@ where
         baseline: Baseline,
     ) -> embedded_graphics::text::renderer::TextMetrics {
         // be careful about the drawing baseline 1px offset
-        let bb_position = position + Point::new(0, self.baseline_offset(baseline) - self.baseline_offset(Baseline::Top));
+        let bb_position = position
+            + Point::new(
+                0,
+                self.baseline_offset(baseline) - self.baseline_offset(Baseline::Top),
+            );
         let default_width = self.font.bounding_box.width as u32;
         let bb_width = text
             .chars()

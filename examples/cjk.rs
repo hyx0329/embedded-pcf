@@ -3,7 +3,15 @@ use embedded_graphics_simulator::{
 };
 
 use embedded_graphics::{
-    mono_font::{ascii::{FONT_4X6, FONT_6X10}, iso_8859_13::FONT_10X20, MonoTextStyle}, pixelcolor::Rgb565, prelude::*, primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StyledDrawable}, text::{renderer::TextRenderer, Alignment, Baseline, Text, TextStyleBuilder}
+    mono_font::{
+        ascii::{FONT_4X6, FONT_6X10},
+        iso_8859_13::FONT_10X20,
+        MonoTextStyle,
+    },
+    pixelcolor::Rgb565,
+    prelude::*,
+    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StyledDrawable},
+    text::{renderer::TextRenderer, Alignment, Baseline, Text, TextStyleBuilder},
 };
 
 use embedded_pcf::{load_pcf_font, PcfFont, PcfFontStyle};
@@ -19,7 +27,7 @@ const FONT_MONO: &[u8] = include_bytes!("../test-fonts/fusion-pixel-12px-monospa
 fn main() {
     let mut display = SimulatorDisplay::<Rgb565>::new(Size::new(320, 120));
 
-    let cn_font = load_pcf_font(Cursor::new( FONT_VARIABLE)).unwrap();
+    let cn_font = load_pcf_font(Cursor::new(FONT_VARIABLE)).unwrap();
     let mut cn_font_style = PcfFontStyle::<_, Rgb565>::new(&cn_font);
     cn_font_style.set_text_color(Rgb565::WHITE);
     cn_font_style.set_background_color(Rgb565::BLACK);
@@ -60,21 +68,25 @@ fn main() {
         .reset_fill_color()
         .build();
 
-    for (i, style) in [centered_bottom, centered_middle, centered_top, centered_alpha].iter().enumerate() {
-        let position = Point::new(-50 + 70 * (i as i32 +1), cjk_center);
-        Text::with_text_style(
-            cjk_text,
-            position,
-            cn_font_style.clone(),
-            *style,
-        )
-        .draw(&mut display)
-        .unwrap();
-        let text_metrics = cn_font_style.measure_string(cjk_text, position, style.baseline);
-        text_metrics.bounding_box.draw_styled(&box_style, &mut display).unwrap();
-        Pixel(position, Rgb565::GREEN)
+    for (i, style) in [
+        centered_bottom,
+        centered_middle,
+        centered_top,
+        centered_alpha,
+    ]
+    .iter()
+    .enumerate()
+    {
+        let position = Point::new(-50 + 70 * (i as i32 + 1), cjk_center);
+        Text::with_text_style(cjk_text, position, cn_font_style.clone(), *style)
             .draw(&mut display)
             .unwrap();
+        let text_metrics = cn_font_style.measure_string(cjk_text, position, style.baseline);
+        text_metrics
+            .bounding_box
+            .draw_styled(&box_style, &mut display)
+            .unwrap();
+        Pixel(position, Rgb565::GREEN).draw(&mut display).unwrap();
     }
 
     let en_center = 80;
@@ -85,20 +97,21 @@ fn main() {
         .draw(&mut display)
         .unwrap();
 
-    for (i, style) in [centered_bottom, centered_middle, centered_top, centered_alpha].iter().enumerate() {
-            let position = Point::new(-50 + 70 * (i as i32 +1), en_center);
-            Text::with_text_style(
-                en_text,
-                position,
-                en_font_style.clone(),
-                *style,
-            )
+    for (i, style) in [
+        centered_bottom,
+        centered_middle,
+        centered_top,
+        centered_alpha,
+    ]
+    .iter()
+    .enumerate()
+    {
+        let position = Point::new(-50 + 70 * (i as i32 + 1), en_center);
+        Text::with_text_style(en_text, position, en_font_style.clone(), *style)
             .draw(&mut display)
             .unwrap();
-            Pixel(position, Rgb565::GREEN)
-                .draw(&mut display)
-                .unwrap();
-        }
+        Pixel(position, Rgb565::GREEN).draw(&mut display).unwrap();
+    }
 
     Pixel(display.bounding_box().center(), Rgb565::GREEN)
         .draw(&mut display)
