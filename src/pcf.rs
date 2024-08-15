@@ -19,19 +19,28 @@
 //!
 //! TODO: `no_std` io::Seek and io::Read.
 
-use core::{cell::RefCell, fmt::Debug};
+use az::SaturatingAs as _;
+use core::{borrow::Borrow, cell::RefCell, fmt::Debug};
 use num_enum::FromPrimitive;
 #[cfg(feature = "std")]
 use std::io;
 
 use embedded_graphics::{
-    image::{Image, ImageRaw},
+    image::{Image, ImageRaw, SubImage},
     pixelcolor::BinaryColor,
-    prelude::{DrawTarget, PixelColor, Point},
-    text::{renderer::TextRenderer, Baseline, DecorationColor},
+    prelude::{DrawTarget, PixelColor, Point, Size},
+    primitives::Rectangle,
+    text::{
+        renderer::{TextMetrics, TextRenderer},
+        Baseline, DecorationColor,
+    },
+    Drawable,
 };
 
-use crate::utils::*;
+use crate::{
+    draw_target::{Background, Both, Foreground, MonoFontDrawTarget},
+    utils::*,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
@@ -632,7 +641,18 @@ pub struct PcfFontStyle<'a, T, C> {
     pub background_color: Option<C>,
     pub underline_color: DecorationColor<C>,
     pub strikethrough_color: DecorationColor<C>,
-    pub font: &'a mut PcfFont<T>,
+    pub font: &'a PcfFont<T>,
+}
+
+impl<'a, T, C> PcfFontStyle<'a, T, C>
+where C: PixelColor {
+    pub fn set_text_color(&mut self, color: C) {
+        self.text_color = Some(color)
+    }
+
+    pub fn set_background_color(&mut self, color: C) {
+        self.background_color = Some(color)
+    }
 }
 
 impl<'a, T, C> PcfFontStyle<'a, T, C>
@@ -641,7 +661,7 @@ where
     C: PixelColor,
 {
     /// Initialize a PcfFontStyle, default all transparent/disabled
-    pub fn new(font: &'a mut PcfFont<T>) -> Self {
+    pub fn new(font: &'a PcfFont<T>) -> Self {
         Self {
             text_color: None,
             background_color: None,
@@ -669,16 +689,74 @@ where
         }
     }
 
+    fn draw_decorations<D>(
+        &self,
+        width: u32,
+        position: Point,
+        target: &mut D,
+    ) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = C>,
+    {
+        // TODO: draw strike through
+        // TODO: draw underline
+
+        Ok(())
+    }
+
     fn draw_string_binary<D>(
         &self,
         text: &str,
-        position: Point,
+        mut position: Point,
         mut target: D,
     ) -> Result<Point, D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        todo!()
+        // draw PCF glyphs directly without spacing, unless character width is
+        // bigger than the glyph width
+
+        // this buffer should be sufficient for glyphs size below 16*16
+        let mut buf: [u8; 40] = [0; 40];
+        for c in text.chars() {
+            match self.font.read_glyph_raw(c as u16, &mut buf) {
+                Ok((length, metrics)) => {
+                    if length == 0 {
+                        // invisible char
+                        position.x += metrics.character_width as i32;
+                    } else {
+                        // map a glyph and paint it
+                        let glyph = ImageRaw::<BinaryColor>::new(
+                            &buf[..length],
+                            metrics.glyph_width() as u32,
+                        );
+                        Image::new(&glyph, position).draw(&mut target)?;
+                        position.x += metrics.character_width as i32;
+                    }
+                }
+                Err(Error::NotFound) => {
+                    match self.font.read_glyph_raw(self.font.default_char, &mut buf) {
+                        Ok((length, metrics)) => {
+                            if length == 0 {
+                                // invisible char
+                                position.x += metrics.character_width as i32;
+                            } else {
+                                // map a glyph and paint it
+                                let glyph = ImageRaw::<BinaryColor>::new(
+                                &buf[..length],
+                                    metrics.glyph_width() as u32,
+                                );
+                                Image::new(&glyph, position).draw(&mut target)?;
+                                position.x += metrics.character_width as i32;
+                            }
+                        }
+                        Err(_) => { /* Just ignore the errors, assume those are 0-width */ }
+                    }
+                }
+                Err(_) => { /* Just ignore the errors, assume those are 0-width */ }
+            };
+        }
+        Ok(position)
     }
 }
 
@@ -700,7 +778,43 @@ where
         D: DrawTarget<Color = Self::Color>,
     {
         let position = position - Point::new(0, self.baseline_offset(baseline));
-        todo!()
+
+        let next = match (self.text_color, self.background_color) {
+            (Some(text_color), Some(background_color)) => self.draw_string_binary(
+                text,
+                position,
+                MonoFontDrawTarget::new(target, Both(text_color, background_color)),
+            )?,
+            (Some(text_color), None) => self.draw_string_binary(
+                text,
+                position,
+                MonoFontDrawTarget::new(target, Foreground(text_color)),
+            )?,
+            (None, Some(background_color)) => self.draw_string_binary(
+                text,
+                position,
+                MonoFontDrawTarget::new(target, Background(background_color)),
+            )?,
+            (None, None) => {
+                let default_width = self.font.bounding_box.0 as u32;
+                let dx = text
+                    .chars()
+                    .map(|c| match self.font.get_glyph_metrics(c as u16) {
+                        Ok(metrics) => metrics.character_width as u32,
+                        Err(_) => default_width,
+                    })
+                    .sum();
+
+                position + Size::new(dx, 0)
+            }
+        };
+
+        if next.x > position.x {
+            let width = (next.x - position.x) as u32;
+            self.draw_decorations(width, position, target)?;
+        }
+
+        Ok(next + Point::new(0, self.baseline_offset(baseline)))
     }
 
     fn draw_whitespace<D>(
@@ -713,7 +827,19 @@ where
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        todo!()
+        let position = position - Point::new(0, self.baseline_offset(baseline));
+        if width != 0 {
+            if let Some(background_color) = self.background_color {
+                target.fill_solid(
+                    &Rectangle::new(position, Size::new(width, self.font.bounding_box.1 as u32)),
+                    background_color,
+                )?;
+            }
+
+            self.draw_decorations(width, position, target)?;
+        }
+
+        Ok(position + Point::new(width.saturating_as(), self.baseline_offset(baseline)))
     }
 
     fn measure_string(
@@ -724,13 +850,27 @@ where
     ) -> embedded_graphics::text::renderer::TextMetrics {
         // TODO: optimize for mono fonts
         let bb_position = position - Point::new(0, self.baseline_offset(baseline));
-        // let mut bb_width = text.chars().map(f)
+        let default_width = self.font.bounding_box.0 as u32;
+        let bb_width = text
+            .chars()
+            .map(|c| match self.font.get_glyph_metrics(c as u16) {
+                Ok(metrics) => metrics.character_width as u32,
+                Err(_) => default_width,
+            })
+            .sum();
 
-        todo!()
+        // TODO: decoration height
+        let bb_height = self.font.bounding_box.1 as u32;
+        let bb_size = Size::new(bb_width, bb_height);
+
+        TextMetrics {
+            bounding_box: Rectangle::new(bb_position, bb_size),
+            next_position: position + bb_size.x_axis(),
+        }
     }
 
     fn line_height(&self) -> u32 {
-        todo!()
+        self.font.bounding_box.1 as u32
     }
 }
 
@@ -762,7 +902,7 @@ mod test {
     fn std_loading_glyphs() {
         let mut buffer: [u8; 50] = [0; 50];
         let cursor = Cursor::new(FONT_VARIABLE);
-        let mut font = load_pcf_font(cursor).unwrap();
+        let font = load_pcf_font(cursor).unwrap();
         println!("font: {:?}", font);
         let (length, metrics) = font.read_glyph_raw('聰' as u16, &mut buffer).unwrap();
         let width = metrics.glyph_width() as usize;
