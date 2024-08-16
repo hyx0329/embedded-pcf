@@ -29,8 +29,8 @@ fn main() {
 
     let cn_font = load_pcf_font(Cursor::new(FONT_VARIABLE)).unwrap();
     let mut cn_font_style = PcfFontStyle::<_, Rgb565>::new(&cn_font);
-    cn_font_style.set_text_color(Rgb565::WHITE);
-    cn_font_style.set_background_color(Rgb565::BLACK);
+    cn_font_style.text_color = Some(Rgb565::WHITE);
+    cn_font_style.background_color = Some(Rgb565::BLACK);
 
     let mut en_font_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
     en_font_style.background_color = Some(Rgb565::BLACK);

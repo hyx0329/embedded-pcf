@@ -247,6 +247,10 @@ pub struct BoundingBox {
     pub height: i16,
     /// aka x_offset
     pub min_left_bearing: i16,
+    /// can be calculated with: [BoundingBox::width] - [BoundingBox::min_left_bearing]
+    pub max_right_bearing: i16,
+    /// can be calculated with: [BoundingBox::height] + [BoundingBox::max_descent]
+    pub max_ascent: i16,
     /// aka y_offset, signed value, usually negative, meaning below the baseline.
     pub max_descent: i16,
 }
@@ -618,6 +622,8 @@ where
             width,
             height,
             min_left_bearing: minbounds.left_side_bearing,
+            max_right_bearing: maxbounds.right_side_bearing,
+            max_ascent: maxbounds.character_ascent,
             max_descent: -maxbounds.character_descent,
         }
     };
@@ -661,19 +667,6 @@ pub struct PcfFontStyle<'a, T, C> {
     pub underline_color: DecorationColor<C>,
     pub strikethrough_color: DecorationColor<C>,
     pub font: &'a PcfFont<T>,
-}
-
-impl<'a, T, C> PcfFontStyle<'a, T, C>
-where
-    C: PixelColor,
-{
-    pub fn set_text_color(&mut self, color: C) {
-        self.text_color = Some(color)
-    }
-
-    pub fn set_background_color(&mut self, color: C) {
-        self.background_color = Some(color)
-    }
 }
 
 impl<'a, T, C> PcfFontStyle<'a, T, C>
@@ -734,6 +727,60 @@ where
         Ok(())
     }
 
+    /// fill the space with background color
+    /// 
+    /// Glyphs doesn't necessarily contains full empty border to overwrite the old content.
+    #[inline]
+    fn draw_prefill_binary<D>(
+        &self,
+        width: u32,
+        position: Point,
+        target: &mut D,
+    ) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        // TODO: add a switch to control prefilling behavior, some monospaced fonts *may* work without this
+        let offset = Point::new(0, -self.font.bounding_box.max_ascent as i32);
+        target.fill_solid(
+            &Rectangle::new(
+                position + offset,
+                Size::new(width, self.font.bounding_box.height as u32),
+            ),
+            BinaryColor::Off,
+        )
+    }
+
+    /// draw a single character at given position.
+    #[inline]
+    fn draw_single_char_binary<D>(
+        &self,
+        glyph_data: &[u8],
+        metrics: MetricsEntry,
+        position: Point,
+        target: &mut D,
+    ) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        // for all visible & invisible character
+        self.draw_prefill_binary(metrics.character_width as u32, position, target)?;
+
+        // draw glyph only if it has data
+        if glyph_data.len() > 0 {
+            // map a glyph and paint it
+            let glyph = ImageRaw::<BinaryColor>::new(glyph_data, metrics.glyph_width() as u32);
+            // per-glyph offset
+            let offset = Point::new(
+                metrics.left_side_bearing as i32,
+                (-metrics.character_ascent) as i32,
+            );
+            Image::new(&glyph, position + offset).draw(target)?;
+        }
+
+        Ok(())
+    }
+
     /// Draw the string, binary color, alphabetic baseline is the upper edge of the given pixel/location.
     ///
     /// Be careful that embedded-graphics actually uses the lower edge of
@@ -754,64 +801,31 @@ where
         */
 
         // this buffer should be sufficient for glyphs size below 16*16
+        // TODO: adapt STD
         let mut buf: [u8; 40] = [0; 40];
         for c in text.chars() {
             match self.font.read_glyph_raw(c as u16, &mut buf) {
                 Ok((length, metrics)) => {
-                    if length == 0 {
-                        // invisible char, but has width
-                        let max_ascent =
-                            self.font.bounding_box.height + self.font.bounding_box.max_descent;
-                        let offset = Point::new(0, -max_ascent as i32);
-                        target.fill_solid(
-                            &Rectangle::new(
-                                position + offset,
-                                Size::new(
-                                    metrics.character_width as u32,
-                                    self.font.bounding_box.height as u32,
-                                ),
-                            ),
-                            BinaryColor::Off,
-                        )?;
-                        position.x += metrics.character_width as i32;
-                    } else {
-                        // TODO: add a switch to control prefilling behavior
-                        // TODO: generalize the prefilling part
-                        let max_ascent =
-                            self.font.bounding_box.height + self.font.bounding_box.max_descent;
-                        let offset = Point::new(0, -max_ascent as i32);
-                        target.fill_solid(
-                            &Rectangle::new(
-                                position + offset,
-                                Size::new(
-                                    metrics.character_width as u32,
-                                    self.font.bounding_box.height as u32,
-                                ),
-                            ),
-                            BinaryColor::Off,
-                        )?;
-                        // map a glyph and paint it
-                        let glyph = ImageRaw::<BinaryColor>::new(
-                            &buf[..length],
-                            metrics.glyph_width() as u32,
-                        );
-                        // Y index Zero is the top line.
-                        // glyphs are aligned to the top active pixel, reduce Y by `ascent - 1` to
-                        // align them at the baseline. Now everything sits on the baseline.
-                        // X need to offset by left_side_bearing to add a necessary gap between current glyph
-                        // and the previous one.
-                        let offset = Point::new(
-                            metrics.left_side_bearing as i32,
-                            (-metrics.character_ascent) as i32,
-                        );
-                        Image::new(&glyph, position + offset).draw(&mut target)?;
-                        position.x += metrics.character_width as i32;
-                    }
+                    self.draw_single_char_binary(&buf[..length], metrics, position, &mut target)?;
+                    position.x += metrics.character_width as i32;
                 }
                 Err(Error::NotFound) => {
-                    // TODO: wait for the previous part, ignored for the moment
+                    // look for the default character to use
+                    // TODO: add a switch to check default font
+                    match self.font.read_glyph_raw(self.font.default_char, &mut buf) {
+                        Ok((length, metrics)) => {
+                            self.draw_single_char_binary(
+                                &buf[..length],
+                                metrics,
+                                position,
+                                &mut target,
+                            )?;
+                            position.x += metrics.character_width as i32;
+                        }
+                        _ => { /* Just ignore the rest, assuming those are 0-width */ }
+                    }
                 }
-                _ => { /* Just ignore the rest, assume those are 0-width */ }
+                _ => { /* Just ignore the rest, assuming those are 0-width */ }
             };
         }
         Ok(position)
