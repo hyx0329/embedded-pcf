@@ -1,11 +1,17 @@
 # embedded-psf
 
-A toy lib loading X11 Portable Compiled Font for embedded-graphics.
+![World hello example screenshot](screenshots/world_hello.png)
 
-`no-std` is currently WIP. It's not working without std because of
-the dependency of some IO traits([std::io::Seek], [std::io::Read]).
+A toy lib loading X11 Portable Compiled Font for [embedded-graphics](https://github.com/embedded-graphics/embedded-graphics).
 
-It's not a complete implementation. Some PCF fonts may not be supported.
+Unfortunately, `no-std` is currently NOT implemented(yet).
+This lib requires std because of the dependency of some IO traits([std::io::Seek], [std::io::Read]).
+
+It's not a complete PCF loader implementation. Some PCF fonts may not be supported.
+
+## Usage
+
+It's very similar with embedded-graphics's built-in mono fonts. Read the `world_hello` example for more details.
 
 ## Motivation
 
