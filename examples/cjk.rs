@@ -1,20 +1,14 @@
-use embedded_graphics_simulator::{
-    BinaryColorTheme, OutputSettingsBuilder, SimulatorDisplay, Window,
-};
+use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 
 use embedded_graphics::{
-    mono_font::{
-        ascii::{FONT_4X6, FONT_6X10},
-        iso_8859_13::FONT_10X20,
-        MonoTextStyle,
-    },
+    mono_font::{ascii::FONT_6X10, MonoTextStyle},
     pixelcolor::Rgb565,
     prelude::*,
-    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StyledDrawable},
-    text::{renderer::TextRenderer, Alignment, Baseline, DecorationColor, Text, TextStyleBuilder},
+    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, StyledDrawable},
+    text::{renderer::TextRenderer, Alignment, Baseline, Text, TextStyleBuilder},
 };
 
-use embedded_pcf::{load_pcf_font, PcfFont, PcfFontStyle};
+use embedded_pcf::{load_pcf_font, PcfFontStyleBuilder};
 
 use std::io::Cursor;
 
@@ -22,17 +16,16 @@ use std::io::Cursor;
 const FONT_VARIABLE: &[u8] =
     include_bytes!("../test-fonts/fusion-pixel-12px-proportional-zh_hans-pad_to_int.pcf");
 /// Mono font, big endian, glyph row padded to byte
-const FONT_MONO: &[u8] = include_bytes!("../test-fonts/fusion-pixel-12px-monospaced-zh_hans.pcf");
+// const FONT_MONO: &[u8] = include_bytes!("../test-fonts/fusion-pixel-12px-monospaced-zh_hans.pcf");
 
 fn main() {
     let mut display = SimulatorDisplay::<Rgb565>::new(Size::new(320, 120));
 
-    let cn_font = load_pcf_font(Cursor::new(FONT_VARIABLE)).unwrap();
-    let mut cn_font_style = PcfFontStyle::<_, Rgb565>::new(&cn_font);
-    cn_font_style.text_color = Some(Rgb565::WHITE);
-    cn_font_style.background_color = Some(Rgb565::BLACK);
-    cn_font_style.strikethrough_color = DecorationColor::Custom(Rgb565::CSS_AQUA);
-    cn_font_style.underline_color = DecorationColor::Custom(Rgb565::CSS_AZURE);
+    let cn_font_vari = load_pcf_font(Cursor::new(FONT_VARIABLE)).unwrap();
+    let cn_font_vari_style = PcfFontStyleBuilder::new(&cn_font_vari)
+        .text_color(Rgb565::WHITE)
+        .background_color(Rgb565::BLACK)
+        .build();
 
     let mut en_font_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
     en_font_style.background_color = Some(Rgb565::BLACK);
@@ -58,7 +51,7 @@ fn main() {
         .build();
 
     let cjk_center = 50;
-    let cjk_text = "世界，嗨！ Mg!乶 ";
+    let cjk_text = "世界，嗨！";
 
     Line::new(Point::new(0, cjk_center), Point::new(320, cjk_center))
         .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
@@ -81,10 +74,10 @@ fn main() {
     .enumerate()
     {
         let position = Point::new(-66 + 70 * (i as i32 + 1), cjk_center);
-        Text::with_text_style(cjk_text, position, cn_font_style.clone(), *style)
+        Text::with_text_style(cjk_text, position, cn_font_vari_style.clone(), *style)
             .draw(&mut display)
             .unwrap();
-        let text_metrics = cn_font_style.measure_string(cjk_text, position, style.baseline);
+        let text_metrics = cn_font_vari_style.measure_string(cjk_text, position, style.baseline);
         text_metrics
             .bounding_box
             .draw_styled(&box_style, &mut display)
@@ -93,7 +86,7 @@ fn main() {
     }
 
     let en_center = 80;
-    let en_text = "World, hi! Mg! ";
+    let en_text = "World, hi!";
 
     Line::new(Point::new(0, en_center), Point::new(320, en_center))
         .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))

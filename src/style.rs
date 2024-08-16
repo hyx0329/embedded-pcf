@@ -19,7 +19,7 @@ use crate::{
 #[cfg(feature = "std")]
 use std::io;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 #[non_exhaustive]
 pub struct PcfFontStyle<'a, T, C> {
     pub text_color: Option<C>,
@@ -341,5 +341,114 @@ where
 
     fn line_height(&self) -> u32 {
         self.font.bounding_box.height as u32
+    }
+}
+
+/// Text style builder for PCF fonts.
+///
+/// Mostly copied from embedded_graphics/mono_font/mono_text_style.rs to maintain
+/// API consistency.
+#[derive(Copy, Clone, Debug)]
+pub struct PcfFontStyleBuilder<'a, T, C> {
+    style: PcfFontStyle<'a, T, C>,
+}
+
+impl<'a, T, C> PcfFontStyleBuilder<'a, T, C>
+where
+    C: PixelColor,
+{
+    /// Create a style builder with existing font
+    ///
+    /// Due to the implementation limit, a font must be provided.
+    pub const fn new(font: &'a PcfFont<T>) -> Self {
+        Self {
+            style: PcfFontStyle {
+                text_color: None,
+                background_color: None,
+                underline_color: DecorationColor::None,
+                strikethrough_color: DecorationColor::None,
+                font,
+            },
+        }
+    }
+
+    /// Enables underline using the text color.
+    pub const fn underline(mut self) -> Self {
+        self.style.underline_color = DecorationColor::TextColor;
+
+        self
+    }
+
+    /// Enables strikethrough using the text color.
+    pub const fn strikethrough(mut self) -> Self {
+        self.style.strikethrough_color = DecorationColor::TextColor;
+
+        self
+    }
+
+    /// Resets the text color to transparent.
+    pub const fn reset_text_color(mut self) -> Self {
+        self.style.text_color = None;
+
+        self
+    }
+
+    /// Resets the background color to transparent.
+    pub const fn reset_background_color(mut self) -> Self {
+        self.style.background_color = None;
+
+        self
+    }
+
+    /// Removes the underline decoration.
+    pub const fn reset_underline(mut self) -> Self {
+        self.style.underline_color = DecorationColor::None;
+
+        self
+    }
+
+    /// Removes the strikethrough decoration.
+    pub const fn reset_strikethrough(mut self) -> Self {
+        self.style.strikethrough_color = DecorationColor::None;
+
+        self
+    }
+
+    /// Sets the text color.
+    pub const fn text_color(mut self, text_color: C) -> Self {
+        self.style.text_color = Some(text_color);
+
+        self
+    }
+
+    /// Sets the background color.
+    pub const fn background_color(mut self, background_color: C) -> Self {
+        self.style.background_color = Some(background_color);
+
+        self
+    }
+
+    /// Enables underline with a custom color.
+    pub const fn underline_with_color(mut self, underline_color: C) -> Self {
+        self.style.underline_color = DecorationColor::Custom(underline_color);
+
+        self
+    }
+
+    /// Enables strikethrough with a custom color.
+    pub const fn strikethrough_with_color(mut self, strikethrough_color: C) -> Self {
+        self.style.strikethrough_color = DecorationColor::Custom(strikethrough_color);
+
+        self
+    }
+
+    /// Builds the text style.
+    ///
+    /// This method can only be called after a font was set by using the [`font`] method. All other
+    /// settings are optional and they will be set to their default value if they are missing.
+    ///
+    /// [`font`]: MonoTextStyleBuilder::font()
+    pub const fn build(self) -> PcfFontStyle<'a, T, C> {
+        self.style
     }
 }
