@@ -46,7 +46,7 @@ where
         match baseline {
             // Bounding box top pixel coincide with position pixel
             Baseline::Top => {
-                (self.font.bounding_box.height + self.font.bounding_box.max_descent) as i32
+                self.font.bounding_box.max_ascent as i32
             }
             // Bounding box bottom pixel coincide with position pixel
             Baseline::Bottom => (1 + self.font.bounding_box.max_descent) as i32,
@@ -73,6 +73,28 @@ where
         let _ = target;
         // TODO: draw strike through
         // TODO: draw underline
+
+        // strike through
+        if let Some(color) = match self.strikethrough_color {
+                DecorationColor::None => None,
+                DecorationColor::Custom(custom_color) => Some(custom_color),
+                DecorationColor::TextColor => self.text_color,
+            } {
+                let offset = Point::new(0, -self.baseline_offset(Baseline::Middle));
+                let rect = Rectangle::new(position + offset, Size::new(width, 1));
+                target.fill_solid(&rect, color)?;
+            }
+
+        // underline is drawn at the bounding box bottom edge
+        if let Some(color) = match self.underline_color {
+            DecorationColor::None => None,
+            DecorationColor::Custom(custom_color) => Some(custom_color),
+            DecorationColor::TextColor => self.text_color,
+        } {
+            let offset = Point::new(0, -self.baseline_offset(Baseline::Bottom));
+            let rect = Rectangle::new(position + offset, Size::new(width, 1));
+            target.fill_solid(&rect, color)?;
+        }
 
         Ok(())
     }
@@ -296,7 +318,7 @@ where
             })
             .sum();
 
-        // TODO: decoration height(underline)
+        // current decoration(underline etc.) implementation doesn't affect height
         let bb_height = self.font.bounding_box.height as u32;
         let bb_size = Size::new(bb_width, bb_height);
 

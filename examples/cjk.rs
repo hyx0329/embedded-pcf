@@ -11,7 +11,7 @@ use embedded_graphics::{
     pixelcolor::Rgb565,
     prelude::*,
     primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StyledDrawable},
-    text::{renderer::TextRenderer, Alignment, Baseline, Text, TextStyleBuilder},
+    text::{renderer::TextRenderer, Alignment, Baseline, DecorationColor, Text, TextStyleBuilder},
 };
 
 use embedded_pcf::{load_pcf_font, PcfFont, PcfFontStyle};
@@ -31,6 +31,8 @@ fn main() {
     let mut cn_font_style = PcfFontStyle::<_, Rgb565>::new(&cn_font);
     cn_font_style.text_color = Some(Rgb565::WHITE);
     cn_font_style.background_color = Some(Rgb565::BLACK);
+    cn_font_style.strikethrough_color = DecorationColor::Custom(Rgb565::CSS_AQUA);
+    cn_font_style.underline_color = DecorationColor::Custom(Rgb565::CSS_AZURE);
 
     let mut en_font_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
     en_font_style.background_color = Some(Rgb565::BLACK);
