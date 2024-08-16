@@ -239,7 +239,11 @@ pub struct BoundingBox {
     pub max_descent: i16,
 }
 
+/// The PCF font container.
+///
+/// Users should use [load_pcf_font] to load a font from a readable & seekable object.
 #[derive(PartialEq)]
+#[non_exhaustive]
 pub struct PcfFont<T> {
     data: RefCell<T>,
     /// Glyph count, informative. Original value is signed.

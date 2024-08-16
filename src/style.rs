@@ -443,11 +443,6 @@ where
     }
 
     /// Builds the text style.
-    ///
-    /// This method can only be called after a font was set by using the [`font`] method. All other
-    /// settings are optional and they will be set to their default value if they are missing.
-    ///
-    /// [`font`]: MonoTextStyleBuilder::font()
     pub const fn build(self) -> PcfFontStyle<'a, T, C> {
         self.style
     }
