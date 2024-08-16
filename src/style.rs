@@ -1,7 +1,20 @@
 use az::SaturatingAs as _;
-use embedded_graphics::{image::{Image, ImageRaw}, pixelcolor::BinaryColor, prelude::{Drawable as _, DrawTarget, PixelColor, Point, Size}, primitives::Rectangle, text::{renderer::{TextMetrics, TextRenderer}, Baseline, DecorationColor}};
+use embedded_graphics::{
+    image::{Image, ImageRaw},
+    pixelcolor::BinaryColor,
+    prelude::{DrawTarget, Drawable as _, PixelColor, Point, Size},
+    primitives::Rectangle,
+    text::{
+        renderer::{TextMetrics, TextRenderer},
+        Baseline, DecorationColor,
+    },
+};
 
-use crate::{draw_target::{Background, Both, Foreground, MonoFontDrawTarget}, pcf::MetricsEntry, PcfFont, Error};
+use crate::{
+    draw_target::{Background, Both, Foreground, MonoFontDrawTarget},
+    pcf::MetricsEntry,
+    Error, PcfFont,
+};
 
 #[cfg(feature = "std")]
 use std::io;
@@ -45,9 +58,7 @@ where
         // matching other fonts behavior.
         match baseline {
             // Bounding box top pixel coincide with position pixel
-            Baseline::Top => {
-                self.font.bounding_box.max_ascent as i32
-            }
+            Baseline::Top => self.font.bounding_box.max_ascent as i32,
             // Bounding box bottom pixel coincide with position pixel
             Baseline::Bottom => (1 + self.font.bounding_box.max_descent) as i32,
             // The bottom edge of the position pixel split the bounding box to 2 halves, and the lower half may be bigger
@@ -76,14 +87,14 @@ where
 
         // strike through
         if let Some(color) = match self.strikethrough_color {
-                DecorationColor::None => None,
-                DecorationColor::Custom(custom_color) => Some(custom_color),
-                DecorationColor::TextColor => self.text_color,
-            } {
-                let offset = Point::new(0, -self.baseline_offset(Baseline::Middle));
-                let rect = Rectangle::new(position + offset, Size::new(width, 1));
-                target.fill_solid(&rect, color)?;
-            }
+            DecorationColor::None => None,
+            DecorationColor::Custom(custom_color) => Some(custom_color),
+            DecorationColor::TextColor => self.text_color,
+        } {
+            let offset = Point::new(0, -self.baseline_offset(Baseline::Middle));
+            let rect = Rectangle::new(position + offset, Size::new(width, 1));
+            target.fill_solid(&rect, color)?;
+        }
 
         // underline is drawn at the bounding box bottom edge
         if let Some(color) = match self.underline_color {
@@ -100,7 +111,7 @@ where
     }
 
     /// fill the space with background color
-    /// 
+    ///
     /// Glyphs doesn't necessarily contains full empty border to overwrite the old content.
     #[inline]
     fn draw_prefill_binary<D>(

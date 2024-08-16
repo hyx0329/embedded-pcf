@@ -5,8 +5,8 @@
 
 mod draw_target;
 mod pcf;
-mod utils;
 mod style;
+mod utils;
 
 pub use pcf::{load_pcf_font, Error, PcfFont};
 pub use style::PcfFontStyle;

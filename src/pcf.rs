@@ -255,11 +255,11 @@ pub struct PcfFont<T> {
 
     glyph_row_padding_format: GlyphPaddingFormat,
     // the 4 fields below actually only contains data of u8 size.
-    min_char_or_byte2: u16, /* As in XFontStruct */
-    max_char_or_byte2: u16, /* As in XFontStruct */
-    min_byte1: u16,         /* As in XFontStruct */
-    max_byte1: u16,         /* As in XFontStruct */
-    pub(crate) default_char: u16,      /* As in XFontStruct */
+    min_char_or_byte2: u16,       /* As in XFontStruct */
+    max_char_or_byte2: u16,       /* As in XFontStruct */
+    min_byte1: u16,               /* As in XFontStruct */
+    max_byte1: u16,               /* As in XFontStruct */
+    pub(crate) default_char: u16, /* As in XFontStruct */
 
     /// Use data here to get the glyph index of a code point.
     encoded_glyph_indices_location: u32,
