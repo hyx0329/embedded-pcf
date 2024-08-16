@@ -32,7 +32,8 @@ fn main() {
     cn_font_style.set_text_color(Rgb565::WHITE);
     cn_font_style.set_background_color(Rgb565::BLACK);
 
-    let en_font_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+    let mut en_font_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+    en_font_style.background_color = Some(Rgb565::BLACK);
 
     let centered_bottom = TextStyleBuilder::new()
         .baseline(Baseline::Bottom)
@@ -55,7 +56,7 @@ fn main() {
         .build();
 
     let cjk_center = 50;
-    let cjk_text = "Worjg!9; 嗨！ ";
+    let cjk_text = "世界，嗨！ Mg!乶 ";
 
     Line::new(Point::new(0, cjk_center), Point::new(320, cjk_center))
         .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
@@ -77,7 +78,7 @@ fn main() {
     .iter()
     .enumerate()
     {
-        let position = Point::new(-50 + 70 * (i as i32 + 1), cjk_center);
+        let position = Point::new(-66 + 70 * (i as i32 + 1), cjk_center);
         Text::with_text_style(cjk_text, position, cn_font_style.clone(), *style)
             .draw(&mut display)
             .unwrap();
@@ -90,7 +91,7 @@ fn main() {
     }
 
     let en_center = 80;
-    let en_text = "Worjg!9; Hi!";
+    let en_text = "World, hi! Mg! ";
 
     Line::new(Point::new(0, en_center), Point::new(320, en_center))
         .into_styled(PrimitiveStyle::with_stroke(Rgb565::RED, 1))
@@ -106,16 +107,21 @@ fn main() {
     .iter()
     .enumerate()
     {
-        let position = Point::new(-50 + 70 * (i as i32 + 1), en_center);
+        let position = Point::new(-60 + 70 * (i as i32 + 1), en_center);
         Text::with_text_style(en_text, position, en_font_style.clone(), *style)
             .draw(&mut display)
+            .unwrap();
+        let text_metrics = en_font_style.measure_string(en_text, position, style.baseline);
+        text_metrics
+            .bounding_box
+            .draw_styled(&box_style, &mut display)
             .unwrap();
         Pixel(position, Rgb565::GREEN).draw(&mut display).unwrap();
     }
 
-    Pixel(display.bounding_box().center(), Rgb565::GREEN)
-        .draw(&mut display)
-        .unwrap();
+    // Pixel(display.bounding_box().center(), Rgb565::GREEN)
+    //     .draw(&mut display)
+    //     .unwrap();
 
     // Uncomment one of the `theme` lines to use a different theme.
     let output_settings = OutputSettingsBuilder::new()

@@ -771,11 +771,25 @@ where
                                     self.font.bounding_box.height as u32,
                                 ),
                             ),
-                            BinaryColor::On,
+                            BinaryColor::Off,
                         )?;
                         position.x += metrics.character_width as i32;
                     } else {
-                        // TODO: fill space around glyphs
+                        // TODO: add a switch to control prefilling behavior
+                        // TODO: generalize the prefilling part
+                        let max_ascent =
+                            self.font.bounding_box.height + self.font.bounding_box.max_descent;
+                        let offset = Point::new(0, -max_ascent as i32);
+                        target.fill_solid(
+                            &Rectangle::new(
+                                position + offset,
+                                Size::new(
+                                    metrics.character_width as u32,
+                                    self.font.bounding_box.height as u32,
+                                ),
+                            ),
+                            BinaryColor::Off,
+                        )?;
                         // map a glyph and paint it
                         let glyph = ImageRaw::<BinaryColor>::new(
                             &buf[..length],
