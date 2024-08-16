@@ -19,28 +19,12 @@
 //!
 //! TODO: `no_std` io::Seek and io::Read.
 
-use az::SaturatingAs as _;
-use core::{borrow::Borrow, cell::RefCell, fmt::Debug};
+use core::{cell::RefCell, fmt::Debug};
 use num_enum::FromPrimitive;
 #[cfg(feature = "std")]
 use std::io;
 
-use embedded_graphics::{
-    image::{Image, ImageRaw, SubImage},
-    pixelcolor::BinaryColor,
-    prelude::{DrawTarget, PixelColor, Point, Size},
-    primitives::Rectangle,
-    text::{
-        renderer::{TextMetrics, TextRenderer},
-        Baseline, DecorationColor,
-    },
-    Drawable,
-};
-
-use crate::{
-    draw_target::{Background, Both, Foreground, MonoFontDrawTarget},
-    utils::*,
-};
+use crate::utils::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
