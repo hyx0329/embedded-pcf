@@ -1,7 +1,5 @@
+use embedded_graphics::{pixelcolor::BinaryColor, prelude::*, primitives::Rectangle};
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
-use embedded_graphics::{
-    pixelcolor::BinaryColor, prelude::*, primitives::Rectangle
-};
 use embedded_text::{
     alignment::HorizontalAlignment,
     style::{HeightMode, TextBoxStyleBuilder},
@@ -19,7 +17,6 @@ const FONT: &[u8] =
 // const FONT: &[u8] = include_bytes!("../test-fonts/fusion-pixel-12px-monospaced-zh_hans.pcf");
 
 fn main() {
-
     let text = "世界，你好！\n\
     我是说，我是世界，你好！这是一个自然段。每个自然段用换行符分隔。\n\
     那么，下次再见！";

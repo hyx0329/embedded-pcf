@@ -438,7 +438,11 @@ where
     }
 
     #[inline]
-    fn get_metrics_compressed(&self, cursor: &mut T, cursor_offset: u32) -> Result<MetricsEntry, Error> {
+    fn get_metrics_compressed(
+        &self,
+        cursor: &mut T,
+        cursor_offset: u32,
+    ) -> Result<MetricsEntry, Error> {
         cursor.seek(io::SeekFrom::Start(cursor_offset as u64))?;
         let mut buffer: [u8; 5] = [0; 5];
         cursor.read_exact(&mut buffer)?;
@@ -446,7 +450,11 @@ where
     }
 
     #[inline]
-    fn get_metrics_standard(&self, cursor: &mut T, cursor_offset: u32) -> Result<MetricsEntry, Error> {
+    fn get_metrics_standard(
+        &self,
+        cursor: &mut T,
+        cursor_offset: u32,
+    ) -> Result<MetricsEntry, Error> {
         cursor.seek(io::SeekFrom::Start(cursor_offset as u64))?;
         let mut buffer: [u8; 12] = [0; 12];
         cursor.read_exact(&mut buffer)?;

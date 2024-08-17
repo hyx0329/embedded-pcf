@@ -350,19 +350,19 @@ where
     T: io::Read + io::Seek + Clone,
 {
     type Color = C;
-    
+
     fn set_text_color(&mut self, text_color: Option<Self::Color>) {
         self.text_color = text_color;
     }
-    
+
     fn set_background_color(&mut self, background_color: Option<Self::Color>) {
         self.background_color = background_color;
     }
-    
+
     fn set_underline_color(&mut self, underline_color: DecorationColor<Self::Color>) {
         self.underline_color = underline_color;
     }
-    
+
     fn set_strikethrough_color(&mut self, strikethrough_color: DecorationColor<Self::Color>) {
         self.strikethrough_color = strikethrough_color;
     }
