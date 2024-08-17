@@ -5,7 +5,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Drawable as _, PixelColor, Point, Size},
     primitives::Rectangle,
     text::{
-        renderer::{TextMetrics, TextRenderer},
+        renderer::{CharacterStyle, TextMetrics, TextRenderer},
         Baseline, DecorationColor,
     },
 };
@@ -31,7 +31,7 @@ pub struct PcfFontStyle<'a, T, C> {
 
 impl<'a, T, C> PcfFontStyle<'a, T, C>
 where
-    T: io::Read + io::Seek,
+    T: io::Read + io::Seek + Clone,
     C: PixelColor,
 {
     /// Initialize a PcfFontStyle, default all transparent/disabled
@@ -218,7 +218,7 @@ where
 impl<T, C> TextRenderer for PcfFontStyle<'_, T, C>
 where
     C: PixelColor,
-    T: io::Read + io::Seek,
+    T: io::Read + io::Seek + Clone,
 {
     type Color = C;
 
@@ -341,6 +341,30 @@ where
 
     fn line_height(&self) -> u32 {
         self.font.bounding_box.height as u32
+    }
+}
+
+impl<T, C> CharacterStyle for PcfFontStyle<'_, T, C>
+where
+    C: PixelColor,
+    T: io::Read + io::Seek + Clone,
+{
+    type Color = C;
+    
+    fn set_text_color(&mut self, text_color: Option<Self::Color>) {
+        self.text_color = text_color;
+    }
+    
+    fn set_background_color(&mut self, background_color: Option<Self::Color>) {
+        self.background_color = background_color;
+    }
+    
+    fn set_underline_color(&mut self, underline_color: DecorationColor<Self::Color>) {
+        self.underline_color = underline_color;
+    }
+    
+    fn set_strikethrough_color(&mut self, strikethrough_color: DecorationColor<Self::Color>) {
+        self.strikethrough_color = strikethrough_color;
     }
 }
 
