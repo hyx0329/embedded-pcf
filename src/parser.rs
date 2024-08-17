@@ -19,7 +19,7 @@
 //!
 //! TODO: `no_std` io::Seek and io::Read.
 
-use core::{cell::RefCell, fmt::Debug};
+use core::fmt::Debug;
 use num_enum::FromPrimitive;
 #[cfg(feature = "std")]
 use std::io;
@@ -242,10 +242,10 @@ pub struct BoundingBox {
 /// The PCF font container.
 ///
 /// Users should use [load_pcf_font] to load a font from a readable & seekable object.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 #[non_exhaustive]
 pub struct PcfFont<T> {
-    data: RefCell<T>,
+    data_cursor: T,
     /// Glyph count, informative. Original value is signed.
     glyph_count: u32,
     /// The number of pixels above the baseline of a typical ascender
@@ -329,7 +329,7 @@ impl<T> PcfFont<T> {
 
 impl<T> PcfFont<T>
 where
-    T: io::Read + io::Seek,
+    T: io::Read + io::Seek + Clone,
 {
     /// Read raw glyph data of the given code_point, return `(length, metrics)`
     /// where `length` is the length of data written, the `metrics` is the glyph's metrics to help
@@ -346,9 +346,10 @@ where
         code_point: u16,
         buf: &mut [u8],
     ) -> Result<(usize, MetricsEntry), Error> {
-        let glyph_index = self.get_glyph_index(code_point)?;
-        let bitmap_offset = self.get_glyph_bitmap_offset(glyph_index)?;
-        let metrics = self.get_metrics(glyph_index)?;
+        let mut cursor = self.data_cursor.clone();
+        let glyph_index = self.get_glyph_index(&mut cursor, code_point)?;
+        let bitmap_offset = self.get_glyph_bitmap_offset(&mut cursor, glyph_index)?;
+        let metrics = self.get_metrics(&mut cursor, glyph_index)?;
 
         let glyph_width = metrics.glyph_width() as usize;
         let glyph_height = metrics.glyph_height() as usize;
@@ -359,7 +360,6 @@ where
         };
         // convert all padding scheme to padding to bytes
         let standard_row_bytes = bytes_per_row(glyph_width, 1);
-        let mut cursor = self.data.borrow_mut();
         cursor.seek(io::SeekFrom::Start(
             (self.bitmap_data_location + bitmap_offset) as u64,
         ))?;
@@ -379,16 +379,17 @@ where
 
     /// Gets only the metrics of the glyph, to calculate width without using the glyph
     pub fn get_glyph_metrics(&self, code_point: u16) -> Result<MetricsEntry, Error> {
-        let glyph_index = self.get_glyph_index(code_point)?;
-        if let Ok(value) = self.get_metrics(glyph_index) {
+        let mut cursor = self.data_cursor.clone();
+        let glyph_index = self.get_glyph_index(&mut cursor, code_point)?;
+        if let Ok(value) = self.get_metrics(&mut cursor, glyph_index) {
             Ok(value)
         } else {
-            let glyph_index = self.get_glyph_index(self.default_char)?;
-            self.get_metrics(glyph_index)
+            let glyph_index = self.get_glyph_index(&mut cursor, self.default_char)?;
+            self.get_metrics(&mut cursor, glyph_index)
         }
     }
 
-    fn get_glyph_index(&self, code_point: u16) -> Result<u16, Error> {
+    fn get_glyph_index(&self, cursor: &mut T, code_point: u16) -> Result<u16, Error> {
         let enc1 = (code_point >> 8) & 0xFF;
         let enc2 = code_point & 0xFF;
         if !(self.min_byte1..=self.max_byte1).contains(&enc1)
@@ -401,7 +402,6 @@ where
         let indice_offset = (enc1 - self.min_byte1)
             * (self.max_char_or_byte2 - self.min_char_or_byte2 + 1)
             + (enc2 - self.min_char_or_byte2);
-        let mut cursor = self.data.borrow_mut();
         // NOTE: each indice takes 2 bytes(u16)
         cursor.seek(io::SeekFrom::Start(
             (self.encoded_glyph_indices_location + (indice_offset as u32) * 2) as u64,
@@ -417,8 +417,7 @@ where
         }
     }
 
-    fn get_glyph_bitmap_offset(&self, glyph_index: u16) -> Result<u32, Error> {
-        let mut cursor = self.data.borrow_mut();
+    fn get_glyph_bitmap_offset(&self, cursor: &mut T, glyph_index: u16) -> Result<u32, Error> {
         let mut buffer: [u8; 4] = [0; 4];
         // NOTE: each glyph location offset takes 4 bytes(u32)
         cursor.seek(io::SeekFrom::Start(
@@ -428,19 +427,18 @@ where
         Ok(u32::from_be_bytes(buffer))
     }
 
-    fn get_metrics(&self, glyph_index: u16) -> Result<MetricsEntry, Error> {
+    fn get_metrics(&self, cursor: &mut T, glyph_index: u16) -> Result<MetricsEntry, Error> {
         if self.metrics_compressed {
             let cursor_offset = self.metrics_data_location + (glyph_index as u32) * 5;
-            self.get_metrics_compressed(cursor_offset)
+            self.get_metrics_compressed(cursor, cursor_offset)
         } else {
             let cursor_offset = self.metrics_data_location + (glyph_index as u32) * 12;
-            self.get_metrics_standard(cursor_offset)
+            self.get_metrics_standard(cursor, cursor_offset)
         }
     }
 
     #[inline]
-    fn get_metrics_compressed(&self, cursor_offset: u32) -> Result<MetricsEntry, Error> {
-        let mut cursor = self.data.borrow_mut();
+    fn get_metrics_compressed(&self, cursor: &mut T, cursor_offset: u32) -> Result<MetricsEntry, Error> {
         cursor.seek(io::SeekFrom::Start(cursor_offset as u64))?;
         let mut buffer: [u8; 5] = [0; 5];
         cursor.read_exact(&mut buffer)?;
@@ -448,8 +446,7 @@ where
     }
 
     #[inline]
-    fn get_metrics_standard(&self, cursor_offset: u32) -> Result<MetricsEntry, Error> {
-        let mut cursor = self.data.borrow_mut();
+    fn get_metrics_standard(&self, cursor: &mut T, cursor_offset: u32) -> Result<MetricsEntry, Error> {
         cursor.seek(io::SeekFrom::Start(cursor_offset as u64))?;
         let mut buffer: [u8; 12] = [0; 12];
         cursor.read_exact(&mut buffer)?;
@@ -472,25 +469,25 @@ impl<T> Debug for PcfFont<T> {
 /// Check and load PCF font using given IO buffer.
 ///
 /// Use this to load the font, never try it manually.
-pub fn load_pcf_font<T>(mut data: T) -> Result<PcfFont<T>, Error>
+pub fn load_pcf_font<T>(mut data_cursor: T) -> Result<PcfFont<T>, Error>
 where
-    T: io::Read + io::Seek,
+    T: io::Read + io::Seek + Clone,
 {
     let mut buffer: [u8; 16] = [0; 16];
-    data.rewind()?;
+    data_cursor.rewind()?;
 
     // verify header
-    data.read_exact(&mut buffer[..4])?;
+    data_cursor.read_exact(&mut buffer[..4])?;
     if buffer[..4] != [0x01, 0x66, 0x63, 0x70] {
         return Err(Error::UnsupportedFormat);
     }
 
     // read necessary tables(here only the table of content entries)
     let mut table_toc: [Option<TableTocEntry>; 5] = [None; 5];
-    data.read_exact(&mut buffer[0..4])?;
+    data_cursor.read_exact(&mut buffer[0..4])?;
     let table_count = u32_from_le_bytes_ref(&buffer[0..4]) as usize;
     for _ in 0..table_count {
-        data.read_exact(&mut buffer[..16])?;
+        data_cursor.read_exact(&mut buffer[..16])?;
         let table_type = u32_from_le_bytes_ref(&buffer[0..4]);
         let table_toc_entry = TableTocEntry {
             format: u32_from_le_bytes_ref(&buffer[4..8]),
@@ -549,17 +546,17 @@ where
 
     // process Bitmaps table
     // not everything is used
-    data.seek(io::SeekFrom::Start(table_toc[0].unwrap().offset as u64 + 4))?;
-    data.read_exact(&mut buffer[0..4])?;
+    data_cursor.seek(io::SeekFrom::Start(table_toc[0].unwrap().offset as u64 + 4))?;
+    data_cursor.read_exact(&mut buffer[0..4])?;
     let glyph_count = u32_from_be_bytes_ref(&buffer);
-    data.seek(io::SeekFrom::Current(glyph_count as i64 * 4))?; // seek to bitmapSizes
-    data.read_exact(&mut buffer[0..12])?;
+    data_cursor.seek(io::SeekFrom::Current(glyph_count as i64 * 4))?; // seek to bitmapSizes
+    data_cursor.read_exact(&mut buffer[0..12])?;
     // let bitmap_size = u32_from_be_bytes_ref(&buffer[8..12]); // original i32, should be fine
 
     // process Metrics table
     // not everything is used
-    data.seek(io::SeekFrom::Start(table_toc[1].unwrap().offset as u64))?;
-    data.read_exact(&mut buffer[0..8])?;
+    data_cursor.seek(io::SeekFrom::Start(table_toc[1].unwrap().offset as u64))?;
+    data_cursor.read_exact(&mut buffer[0..8])?;
     let metrics_compressed = table_toc[1].unwrap().format & PCF_COMPRESSED_METRICS > 0;
     let metrics_count = {
         if metrics_compressed {
@@ -575,8 +572,8 @@ where
     // process Encoding table
     // not everything is used
     // skip format field
-    data.seek(io::SeekFrom::Start(table_toc[2].unwrap().offset as u64 + 4))?;
-    data.read_exact(&mut buffer[0..10])?;
+    data_cursor.seek(io::SeekFrom::Start(table_toc[2].unwrap().offset as u64 + 4))?;
+    data_cursor.read_exact(&mut buffer[0..10])?;
     let min_char_or_byte2 = u16_from_be_bytes_ref(&buffer[0..2]);
     let max_char_or_byte2 = u16_from_be_bytes_ref(&buffer[2..4]);
     let min_byte1 = u16_from_be_bytes_ref(&buffer[4..6]);
@@ -586,23 +583,23 @@ where
     // process Accelerators table
     // not everything is used
     // skip format, and some u8 meta data
-    data.seek(io::SeekFrom::Start(
+    data_cursor.seek(io::SeekFrom::Start(
         table_toc[3].unwrap().offset as u64 + 4 + 8,
     ))?;
-    data.read_exact(&mut buffer[0..8])?;
+    data_cursor.read_exact(&mut buffer[0..8])?;
     let ascent = i32_from_be_bytes_ref(&buffer[0..4]);
     let descent = i32_from_be_bytes_ref(&buffer[4..8]);
     // skip `maxOverlap`
-    data.seek_relative(4)?;
+    data_cursor.seek_relative(4)?;
     // load ink bounds on demand
     let bounding_box = {
         if table_toc[3].unwrap().format & PCF_ACCEL_W_INKBOUNDS > 0 {
             // skip minbounds and maxbounds, use ink_minbounds and ink_maxbounds instead
-            data.seek_relative(24)?;
+            data_cursor.seek_relative(24)?;
         }
-        data.read_exact(&mut buffer[0..12])?;
+        data_cursor.read_exact(&mut buffer[0..12])?;
         let minbounds = MetricsEntry::new_from_standard(&buffer);
-        data.read_exact(&mut buffer[0..12])?;
+        data_cursor.read_exact(&mut buffer[0..12])?;
         let maxbounds = MetricsEntry::new_from_standard(&buffer);
         let width = maxbounds.right_side_bearing - minbounds.left_side_bearing;
         let height = maxbounds.character_ascent + maxbounds.character_descent;
@@ -627,8 +624,10 @@ where
     //     bitmap_data_location, metrics_data_location, encoded_glyph_indices_location, table_toc[2].unwrap().offset
     // );
 
+    data_cursor.rewind()?;
+
     Ok(PcfFont {
-        data: RefCell::new(data),
+        data_cursor,
         glyph_count,
         ascent,
         descent,
