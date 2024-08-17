@@ -4,9 +4,9 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 mod draw_target;
-mod pcf;
+mod parser;
 mod style;
 mod utils;
 
-pub use pcf::{load_pcf_font, Error, PcfFont};
+pub use parser::{load_pcf_font, Error, PcfFont};
 pub use style::{PcfFontStyle, PcfFontStyleBuilder};

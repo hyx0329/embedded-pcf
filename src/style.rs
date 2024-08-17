@@ -12,7 +12,7 @@ use embedded_graphics::{
 
 use crate::{
     draw_target::{Background, Both, Foreground, MonoFontDrawTarget},
-    pcf::MetricsEntry,
+    parser::MetricsEntry,
     Error, PcfFont,
 };
 
