@@ -20,3 +20,4 @@ std = []
 
 [dev-dependencies]
 embedded-graphics-simulator = "0.6.0"
+embedded-text = "0.7.2"
