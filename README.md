@@ -7,6 +7,10 @@ A toy lib loading X11 Portable Compiled Font for [embedded-graphics](https://git
 Unfortunately, `no-std` is currently NOT implemented(yet).
 This lib requires std because of the dependency of some IO traits([std::io::Seek], [std::io::Read]).
 
+This crate is tested on one ESP32 device with esp-idf-hal. It's not fast but still usable.
+
+![an example on m5stack core2](screenshots/m5core2.jpeg)
+
 It's not a complete PCF loader implementation. Some PCF fonts may not be supported.
 
 ## Usage
