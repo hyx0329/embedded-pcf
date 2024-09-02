@@ -139,19 +139,26 @@ where
 
     /// measure background rectangle
     /// this is somehow overlapped with `measure_string`
-    fn text_bbox(&self, text: &str, position: Point) -> Rectangle {
-        // be careful about the drawing baseline 1px offset
-        let offset = Point::new(0, -self.font.bounding_box.max_ascent as i32);
-        let default_width = self.font.bounding_box.width as u32;
-        let bb_width = text
-            .chars()
-            .map(|c| match self.font.get_glyph_metrics(c as u16) {
-                Ok(metrics) => metrics.character_width as u32,
-                Err(_) => default_width,
-            })
-            .sum();
-        let bb_size = Size::new(bb_width, self.font.bounding_box.height as u32);
-        Rectangle::new(position + offset, bb_size)
+    fn text_bbox(&self, text: &str, position: Point) -> Option<Rectangle> {
+        if text.is_empty() {
+            None
+        } else {
+            // be careful about the drawing baseline 1px offset
+            let offset = Point::new(0, -self.font.bounding_box.max_ascent as i32);
+            let default_width = self.font.bounding_box.width as u32;
+            // FIXME: for variable italic/styled fonts, the character_width may be smaller than right_side_bearing
+            // Glyphs may exceed the right border.
+            let bb_width = text
+                .chars()
+                .map(|c| match self.font.get_glyph_metrics(c as u16) {
+                    Ok(metrics) => metrics.character_width as u32,
+                    Err(_) => default_width,
+                })
+                .sum();
+
+            let bb_size = Size::new(bb_width, self.font.bounding_box.height as u32);
+            Some(Rectangle::new(position + offset, bb_size))
+        }
     }
 
     /// Batch fill the background of the given string
@@ -168,8 +175,11 @@ where
         D: DrawTarget<Color = BinaryColor>,
     {
         if self.background_color.is_some() {
-            let background_bbox = self.text_bbox(text, position);
-            target.fill_solid(&background_bbox, BinaryColor::Off)
+            if let Some(background_bbox) = self.text_bbox(text, position) {
+                target.fill_solid(&background_bbox, BinaryColor::Off)
+            } else {
+                Ok(())
+            }
         } else {
             Ok(())
         }
@@ -326,28 +336,23 @@ where
         position: Point,
         baseline: Baseline,
     ) -> embedded_graphics::text::renderer::TextMetrics {
-        // be careful about the drawing baseline 1px offset
-        let bb_position = position
-            + Point::new(
-                0,
-                self.baseline_offset(baseline) - self.baseline_offset(Baseline::Top),
-            );
-        let default_width = self.font.bounding_box.width as u32;
-        let bb_width = text
-            .chars()
-            .map(|c| match self.font.get_glyph_metrics(c as u16) {
-                Ok(metrics) => metrics.character_width as u32,
-                Err(_) => default_width,
-            })
-            .sum();
+        let bbox = if let Some(mut bbox) = self.text_bbox(text, position) {
+            bbox.top_left += Point::new(0, self.baseline_offset(baseline));
+            bbox
+        } else {
+            let bb_position = position
+                + Point::new(
+                    0,
+                    self.baseline_offset(baseline) - self.baseline_offset(Baseline::Top),
+                );
+            Rectangle::new(bb_position, Size::new(0, 0))
+        };
 
         // current decoration(underline etc.) implementation doesn't affect height
-        let bb_height = self.font.bounding_box.height as u32;
-        let bb_size = Size::new(bb_width, bb_height);
 
         TextMetrics {
-            bounding_box: Rectangle::new(bb_position, bb_size),
-            next_position: position + bb_size.x_axis(),
+            bounding_box: bbox,
+            next_position: position + bbox.size.x_axis(),
         }
     }
 
