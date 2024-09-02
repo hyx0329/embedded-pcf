@@ -58,19 +58,11 @@ impl<T: DrawTarget> DrawTarget for MonoFontDrawTarget<'_, T, Background<T::Color
     type Color = BinaryColor;
     type Error = T::Error;
 
-    fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I) -> Result<(), Self::Error>
+    fn fill_contiguous<I>(&mut self, _area: &Rectangle, _colors: I) -> Result<(), Self::Error>
     where
         I: IntoIterator<Item = Self::Color>,
     {
-        let foreground_color = self.colors.0;
-
-        self.parent.draw_iter(
-            colors
-                .into_iter()
-                .into_pixels(area)
-                .filter(|Pixel(_, color)| color.is_off())
-                .map(|Pixel(pos, _)| Pixel(pos, foreground_color)),
-        )
+        Ok(()) // dont do anything, the background is filled by styling code
     }
 
     fn draw_iter<I>(&mut self, _pixels: I) -> Result<(), Self::Error>
@@ -101,14 +93,14 @@ impl<T: DrawTarget> DrawTarget for MonoFontDrawTarget<'_, T, Both<T::Color>> {
         I: IntoIterator<Item = Self::Color>,
     {
         let foreground_color = self.colors.0;
-        let background_color = self.colors.1;
 
-        self.parent.fill_contiguous(
-            area,
-            colors.into_iter().map(|color| match color {
-                BinaryColor::Off => background_color,
-                BinaryColor::On => foreground_color,
-            }),
+        // only fill foreground color as background is handled by styling code
+        self.parent.draw_iter(
+            colors
+                .into_iter()
+                .into_pixels(area)
+                .filter(|Pixel(_, color)| color.is_on())
+                .map(|Pixel(pos, _)| Pixel(pos, foreground_color)),
         )
     }
 

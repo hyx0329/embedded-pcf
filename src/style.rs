@@ -110,30 +110,6 @@ where
         Ok(())
     }
 
-    /// fill the space with background color
-    ///
-    /// Glyphs doesn't necessarily contains full empty border to overwrite the old content.
-    #[inline]
-    fn draw_prefill_binary<D>(
-        &self,
-        width: u32,
-        position: Point,
-        target: &mut D,
-    ) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = BinaryColor>,
-    {
-        // TODO: add a switch to control prefilling behavior, some monospaced fonts *may* work without this
-        let offset = Point::new(0, -self.font.bounding_box.max_ascent as i32);
-        target.fill_solid(
-            &Rectangle::new(
-                position + offset,
-                Size::new(width, self.font.bounding_box.height as u32),
-            ),
-            BinaryColor::Off,
-        )
-    }
-
     /// draw a single character at given position.
     #[inline]
     fn draw_single_char_binary<D>(
@@ -146,9 +122,6 @@ where
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        // for all visible & invisible character
-        self.draw_prefill_binary(metrics.character_width as u32, position, target)?;
-
         // draw glyph only if it has data
         if glyph_data.len() > 0 {
             // map a glyph and paint it
@@ -162,6 +135,44 @@ where
         }
 
         Ok(())
+    }
+
+    /// measure background rectangle
+    /// this is somehow overlapped with `measure_string`
+    fn text_bbox(&self, text: &str, position: Point) -> Rectangle {
+        // be careful about the drawing baseline 1px offset
+        let offset = Point::new(0, -self.font.bounding_box.max_ascent as i32);
+        let default_width = self.font.bounding_box.width as u32;
+        let bb_width = text
+            .chars()
+            .map(|c| match self.font.get_glyph_metrics(c as u16) {
+                Ok(metrics) => metrics.character_width as u32,
+                Err(_) => default_width,
+            })
+            .sum();
+        let bb_size = Size::new(bb_width, self.font.bounding_box.height as u32);
+        Rectangle::new(position + offset, bb_size)
+    }
+
+    /// Batch fill the background of the given string
+    ///
+    /// Glyphs doesn't necessarily contains full empty border to overwrite the old content.
+    #[inline]
+    fn fill_string_background<D>(
+        &self,
+        text: &str,
+        position: Point,
+        target: &mut D,
+    ) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        if self.background_color.is_some() {
+            let background_bbox = self.text_bbox(text, position);
+            target.fill_solid(&background_bbox, BinaryColor::Off)
+        } else {
+            Ok(())
+        }
     }
 
     /// Draw the string, binary color, alphabetic baseline is the upper edge of the given pixel/location.
@@ -186,6 +197,7 @@ where
         // this buffer should be sufficient for glyphs size below 16*16
         // TODO: adapt STD
         let mut buf: [u8; 40] = [0; 40];
+        self.fill_string_background(text, position, &mut target)?;
         for c in text.chars() {
             match self.font.read_glyph_raw(c as u16, &mut buf) {
                 Ok((length, metrics)) => {
